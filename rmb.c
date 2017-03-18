@@ -13,11 +13,11 @@ int main(int argc, char ** argv)
 	int sipt = 59000;
 
 	h = gethostbyname("tejo.tecnico.ulisboa.pt");
-	
+
 	if(!inet_aton(h->h_addr_list[0] , &siip)){
 		exit(-1);
-	} 
-
+	}
+/*teste*/
 
 	if(argc==3) /*caso em que so dão o ip ou o porto*/
 		{
@@ -39,7 +39,7 @@ int main(int argc, char ** argv)
 			if(!inet_aton(argv[2] , &siip)){
 				exit(-1);
 			}
-			sipt=atoi(argv[4]);		
+			sipt=atoi(argv[4]);
 		}
 
 		sid.sin_addr=siip;
@@ -50,4 +50,3 @@ int main(int argc, char ** argv)
 	return(0);
 
 }
-
