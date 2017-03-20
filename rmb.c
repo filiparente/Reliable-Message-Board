@@ -18,7 +18,7 @@ int main(int argc, char ** argv)
 
 
 	if(argc==3) /*caso em que so dão o ip ou o porto*/
-		{
+	{
 			if(!strcmp(argv[1],"-i"))
 				{
 					if(!inet_aton(argv[2] , siip))
@@ -31,14 +31,14 @@ int main(int argc, char ** argv)
 					sipt=atoi(argv[2]);
 				}
 
-		}
+	}
 	else if(argc==5) /*caso em que dão o IP e o porto*/
-		{
+	{
 			if(!inet_aton(argv[2] , siip)){
 				exit(-1);
 			}
-			sipt=atoi(argv[4]);		
-		}
+			sipt=atoi(argv[4]);
+	}
 
 		sid.sin_addr=*siip;
 		sid.sin_port=sipt;
@@ -48,4 +48,3 @@ int main(int argc, char ** argv)
 	return(0);
 
 }
-
