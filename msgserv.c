@@ -6,7 +6,7 @@
 #include <netdb.h>
 
 typedef struct message_server{
-  char name[50];
+  char *name;
   u_int16_t udp_port;
   u_int16_t tcp_port;
   struct in_addr ip_addr;
@@ -14,12 +14,11 @@ typedef struct message_server{
 
 int main(int argc, char** argv){
 
-  char name[50];
+  char *name;
   int upt = 0, tpt = 0;
-  struct in_addr* ip;
   int i;
   int m, r, sipt;
-  struct in_addr* siip;
+  struct in_addr *siip, ip;
   struct hostent *h;
   struct sockaddr_in sid; /*estruturas para os servidores de identidades e de mensagens*/
   struct message_server ms;
@@ -29,10 +28,13 @@ int main(int argc, char** argv){
     exit(-1);
   }
 
+  name = (char*)malloc(sizeof(argv[2])*sizeof(char));
+  ms.name = (char*)malloc(sizeof(argv[2]+1)*sizeof(char));
+/*  struct in_addr *ip;  struct in_addr *ip;*/
   strcpy( name , argv[2] );
   upt = atoi( argv[6] );
   tpt = atoi( argv[8] );
-  if( !inet_aton( argv[4] , ip ) ){
+  if( !inet_aton( argv[4] , &ip ) ){
     exit(-1);
   }
 
@@ -40,7 +42,7 @@ int main(int argc, char** argv){
   strcpy(ms.name , name );
   ms.udp_port = upt;
   ms.tcp_port = tpt;
-  ms.ip_addr = *ip;
+  ms.ip_addr = ip;
 
   /*definir parametros opcionais, caso nao sejam dados na invocacao*/
   if((h = gethostbyname("tejo.tecnico.ulisboa.pt")) == NULL) exit(-1);
@@ -71,7 +73,7 @@ int main(int argc, char** argv){
   sid.sin_port=sipt;
 
   printf("MS -> name: %s, IP: %s, udp port: %d, tcp port: %d\n", ms.name, inet_ntoa(ms.ip_addr), ms.udp_port, ms.tcp_port);
-  printf("SID -> IP: %s udo port: %d \n", inet_ntoa(sid.sin_addr), sid.sin_port);
+  printf("SID -> IP: %s udp port: %d \n", inet_ntoa(sid.sin_addr), sid.sin_port);
   printf("maximo de mensagens: %d , intervalo de tempo: %d\n", m, r);
 
   return(0);
