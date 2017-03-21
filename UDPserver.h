@@ -5,6 +5,6 @@
 
 
 int new_udp_serv( struct in_addr*, int, struct sockaddr_in*);
-
+int new_socket(struct in_addr*, int, struct sockaddr_in*);
 
 #endif

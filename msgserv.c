@@ -5,6 +5,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <unistd.h>
 
 
 #define LINE_MAX 50
@@ -19,10 +20,11 @@ typedef struct message_server{
 int main(int argc, char** argv){
 
   char *name;
-  char line[50] msg[100];
+  char line[50], msg[100], join_msg[100], buffer[128];
   int upt = 0, tpt = 0;
   int i, n=0;
-  int m, r, sipt,socket_udp;
+  int m, r, sipt, addrlen;
+  int socket_udp_c;
   struct in_addr *siip, ip;
   struct hostent *h;
   struct sockaddr_in sid; /*estruturas para os servidores de identidades e de mensagens*/
@@ -54,7 +56,7 @@ int main(int argc, char** argv){
   if((h = gethostbyname("tejo.tecnico.ulisboa.pt")) == NULL) exit(-1);
 
   siip = (struct in_addr*)h->h_addr_list[0];
-  sipt = 59000;
+  sipt = 5566;
   m = 200;
   r = 10;
 
@@ -77,19 +79,61 @@ int main(int argc, char** argv){
   }
 
   /*sid.sin_addr = *siip;*/
+  printf(">> ");
+  if(fgets(line, LINE_MAX, stdin) != NULL){
+  		if(!strcmp( line, "join\n" )){
 
-  if(fgets(line, LINE_MAX, stdin)!=NULL){
-  		if(!strcmp( line, "join" ))
-  			{
   				socket_udp_c = new_socket( siip , sipt , &sid );
 
-  				snprintf( msg, sizeof(msg), "%s %s;%s;%d;%d", "REG", ms.name, inet_ntoa(ms.ip_addr), ms.udp_port, ms.tcp_port );
+  				snprintf( join_msg, sizeof(join_msg), "%s %s;%s;%d;%d", "REG", ms.name, inet_ntoa(ms.ip_addr), ms.udp_port, ms.tcp_port );
 
-  				n = sendto( socket_udp_c, msg, strlen(msg)+1, 0, (struct sockaddr*)&sid, sizeof(sid) );
+  				n = sendto( socket_udp_c, join_msg, strlen(msg)+1, 0, (struct sockaddr*)&sid, sizeof(sid) );
   				if( n == -1 ){
   					exit(1);
   				}
-  			}
+  		}
+      else{
+        printf("Error: command not defined\n");
+        exit(1);
+      }
+  }
+
+  printf(">> ");
+  while(fgets(line, LINE_MAX, stdin) != NULL){
+
+    if( !strcmp( line, "exit\n" )){
+      close(socket_udp_c);
+      break;
+    }
+
+    else if( !strcmp( line, "show_servers\n")){
+
+      strcpy(msg, "GET_SERVERS");
+      n = sendto( socket_udp_c, msg, strlen(msg)+1, 0, (struct sockaddr*)&sid, sizeof(sid) );
+      if( n == -1 ){
+        exit(1);
+      }
+
+      addrlen = sizeof(sid);
+      n = recvfrom( socket_udp_c, buffer, 128, 0, (struct sockaddr*)&sid, &addrlen );
+      if( n == -1){
+        exit(1);
+      }
+      printf("%s\n", buffer);
+
+    }
+    else if( !strcmp( line, "show_messages\n")){
+
+        printf("received show_messages\n");
+
+    }
+    else{
+
+      printf("Error: command not defined\n");
+      exit(1);
+
+    }
+    printf(">> ");
   }
 
   return(0);
