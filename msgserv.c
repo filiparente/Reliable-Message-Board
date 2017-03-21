@@ -6,6 +6,8 @@
 #include <netdb.h>
 #include "UDPserver.h"
 
+#define LINE_MAX 50
+
 typedef struct message_server{
   char *name;
   u_int16_t udp_port;
@@ -17,9 +19,10 @@ typedef struct message_server{
 int main(int argc, char** argv){
 
   char *name;
+  char line[50] msg[100];
   int upt = 0, tpt = 0;
-  int i;
-  int m, r, sipt,socket;
+  int i, n=0;
+  int m, r, sipt,socket_udp;
   struct in_addr *siip, ip;
   struct hostent *h;
   struct sockaddr_in sid; /*estruturas para os servidores de identidades e de mensagens*/
@@ -42,14 +45,15 @@ int main(int argc, char** argv){
   }
 
   /*atribuir os parametros a uma variavel message_server*/
-  strcpy(ms.name , name );
+  strcpy( ms.name , name );
   ms.udp_port = upt;
   ms.tcp_port = tpt;
   ms.ip_addr = ip;
 
   /*definir parametros opcionais, caso nao sejam dados na invocacao*/
   if((h = gethostbyname("tejo.tecnico.ulisboa.pt")) == NULL) exit(-1);
-	siip = (struct in_addr*)h->h_addr_list[0];
+
+  siip = (struct in_addr*)h->h_addr_list[0];
   sipt = 59000;
   m = 200;
   r = 10;
@@ -74,7 +78,19 @@ int main(int argc, char** argv){
 
   /*sid.sin_addr = *siip;*/
 
-  socket = new_udp_serv( siip , sipt, &sid );
+  if(fgets(line, LINE_MAX, stdin)!=NULL){
+  		if(!strcmp( line, "join" ))
+  			{
+  				socket_udp_c = new_socket( siip , sipt , &sid );
+
+  				snprintf( msg, sizeof(msg), "%s %s;%s;%d;%d", "REG", ms.name, inet_ntoa(ms.ip_addr), ms.udp_port, ms.tcp_port );
+
+  				n = sendto( socket_udp_c, msg, strlen(msg)+1, 0, (struct sockaddr*)&sid, sizeof(sid) );
+  				if( n == -1 ){
+  					exit(1);
+  				}
+  			}
+  }
 
   return(0);
 
