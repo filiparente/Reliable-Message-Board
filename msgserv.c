@@ -4,6 +4,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
+#include "UDPserver.h"
 
 typedef struct message_server{
   char *name;
@@ -12,16 +13,18 @@ typedef struct message_server{
   struct in_addr ip_addr;
 };
 
+
 int main(int argc, char** argv){
 
   char *name;
   int upt = 0, tpt = 0;
   int i;
-  int m, r, sipt;
+  int m, r, sipt,socket;
   struct in_addr *siip, ip;
   struct hostent *h;
   struct sockaddr_in sid; /*estruturas para os servidores de identidades e de mensagens*/
   struct message_server ms;
+
 
   if( argc < 9 ){
     printf("invalid number of arguments\n");
@@ -69,12 +72,9 @@ int main(int argc, char** argv){
     }
   }
 
-  sid.sin_addr=*siip;
-  sid.sin_port=sipt;
+  /*sid.sin_addr = *siip;*/
 
-  printf("MS -> name: %s, IP: %s, udp port: %d, tcp port: %d\n", ms.name, inet_ntoa(ms.ip_addr), ms.udp_port, ms.tcp_port);
-  printf("SID -> IP: %s udp port: %d \n", inet_ntoa(sid.sin_addr), sid.sin_port);
-  printf("maximo de mensagens: %d , intervalo de tempo: %d\n", m, r);
+  socket = new_udp_serv( siip , sipt, &sid );
 
   return(0);
 
