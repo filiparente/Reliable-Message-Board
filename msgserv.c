@@ -1,18 +1,18 @@
+#include "UDPserver.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#include "UDPserver.h"
+
 
 typedef struct message_server{
   char *name;
   u_int16_t udp_port;
   u_int16_t tcp_port;
   struct in_addr ip_addr;
-};
-
+}message_server;
 
 int main(int argc, char** argv){
 
