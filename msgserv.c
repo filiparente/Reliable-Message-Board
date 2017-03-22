@@ -6,6 +6,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <unistd.h>
+#include <errno.h>
 
 
 #define LINE_MAX 50
@@ -24,7 +25,8 @@ int main(int argc, char** argv){
   int upt = 0, tpt = 0;
   int i, n=0;
   int m, r, sipt, addrlen;
-  int socket_udp_c;
+  int socket_udp_c;-n name -j 100.90.2.4 -u 50000 -t 60000
+
   struct in_addr *siip, ip;
   struct hostent *h;
   struct sockaddr_in sid; /*estruturas para os servidores de identidades e de mensagens*/
@@ -36,7 +38,7 @@ int main(int argc, char** argv){
     exit(-1);
   }
 
-  name = (char*)malloc(sizeof(argv[2])*sizeof(char));
+  name = (char*)malloc(sizeof(argv[2]+1)*sizeof(char));
   ms.name = (char*)malloc(sizeof(argv[2]+1)*sizeof(char));
 /*  struct in_addr *ip;  struct in_addr *ip;*/
   strcpy( name , argv[2] );
@@ -56,7 +58,7 @@ int main(int argc, char** argv){
   if((h = gethostbyname("tejo.tecnico.ulisboa.pt")) == NULL) exit(-1);
 
   siip = (struct in_addr*)h->h_addr_list[0];
-  sipt = 5566;
+  sipt = 59000;
   m = 200;
   r = 10;
 
