@@ -25,7 +25,7 @@ int main(int argc, char** argv){
   int upt = 0, tpt = 0;
   int i, n=0;
   int m, r, sipt, addrlen;
-  int socket_udp_c;-n name -j 100.90.2.4 -u 50000 -t 60000
+  int socket_udp_c;
 
   struct in_addr *siip, ip;
   struct hostent *h;
@@ -55,7 +55,11 @@ int main(int argc, char** argv){
   ms.ip_addr = ip;
 
   /*definir parametros opcionais, caso nao sejam dados na invocacao*/
-  if((h = gethostbyname("tejo.tecnico.ulisboa.pt")) == NULL) exit(-1);
+  if((h = gethostbyname("tejo.tecnico.ulisboa.pt")) == NULL) {
+      printf("gethostbyname: %s\n", strerror(h_errno) );
+      exit(-1);
+  }
+
 
   siip = (struct in_addr*)h->h_addr_list[0];
   sipt = 59000;
@@ -88,8 +92,7 @@ int main(int argc, char** argv){
   				socket_udp_c = new_socket( siip , sipt , &sid );
 
   				snprintf( join_msg, sizeof(join_msg), "%s %s;%s;%d;%d", "REG", ms.name, inet_ntoa(ms.ip_addr), ms.udp_port, ms.tcp_port );
-
-  				n = sendto( socket_udp_c, join_msg, strlen(msg)+1, 0, (struct sockaddr*)&sid, sizeof(sid) );
+  				n = sendto( socket_udp_c, join_msg, strlen(join_msg), 0, (struct sockaddr*)&sid, sizeof(sid) );
   				if( n == -1 ){
   					exit(1);
   				}
@@ -104,7 +107,10 @@ int main(int argc, char** argv){
   while(fgets(line, LINE_MAX, stdin) != NULL){
 
     if( !strcmp( line, "exit\n" )){
-      close(socket_udp_c);
+      if( close(socket_udp_c) == 0){
+        printf("close socket: %s\n", strerror(errno) );
+        exit(1);
+      }
       break;
     }
 
@@ -138,6 +144,10 @@ int main(int argc, char** argv){
     printf(">> ");
   }
 
+  if( close(socket_udp_c) == 0){
+    printf("gethostbyname: %s\n", strerror(errno) );
+    exit(1);
+  }
   return(0);
 
 }
