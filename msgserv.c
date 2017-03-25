@@ -7,6 +7,7 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/select.h>
 
 
 #define LINE_MAX 50
@@ -21,11 +22,13 @@ typedef struct message_server{
 int main(int argc, char** argv){
 
   char *name;
-  char line[50], msg[100], join_msg[100], buffer[128];
+  char line[50], msg[100], join_msg[100], buffer[1000];
   int upt = 0, tpt = 0;
   int i, n=0;
   int m, r, sipt, addrlen;
   int socket_udp_c;
+  fd_set readfds;
+  struct timeval timeout;
 
   struct in_addr *siip, ip;
   struct hostent *h;
@@ -53,6 +56,8 @@ int main(int argc, char** argv){
   ms.udp_port = upt;
   ms.tcp_port = tpt;
   ms.ip_addr = ip;
+
+  strcpy(msg, "GET_SERVERS");
 
   /*definir parametros opcionais, caso nao sejam dados na invocacao*/
   if((h = gethostbyname("tejo.tecnico.ulisboa.pt")) == NULL) {
@@ -105,6 +110,7 @@ int main(int argc, char** argv){
 
   printf(">> ");
   while(fgets(line, LINE_MAX, stdin) != NULL){
+  	memset(buffer, 0, sizeof(buffer));
 
     if( !strcmp( line, "exit\n" )){
       if( close(socket_udp_c) == 0){
@@ -116,18 +122,17 @@ int main(int argc, char** argv){
 
     else if( !strcmp( line, "show_servers\n")){
 
-      strcpy(msg, "GET_SERVERS");
       n = sendto( socket_udp_c, msg, strlen(msg)+1, 0, (struct sockaddr*)&sid, sizeof(sid) );
       if( n == -1 ){
         exit(1);
       }
 
       addrlen = sizeof(sid);
-      n = recvfrom( socket_udp_c, buffer, 128, 0, (struct sockaddr*)&sid, &addrlen );
+      n = recvfrom( socket_udp_c, buffer, 1000, 0, (struct sockaddr*)&sid, &addrlen );
       if( n == -1){
         exit(1);
       }
-      printf("%s\n", buffer);
+      	printf("%s", buffer);
 
     }
     else if( !strcmp( line, "show_messages\n")){
