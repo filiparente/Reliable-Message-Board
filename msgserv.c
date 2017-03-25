@@ -7,6 +7,7 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <errno.h>
+#include <sys/select.h>
 
 
 #define LINE_MAX 50
@@ -29,6 +30,8 @@ int main(int argc, char** argv){
   int i, n=0;
   int m, r, sipt, addrlen;
   int socket_udp_c;
+  fd_set readfds;
+  struct timeval timeout;
 
   struct in_addr *siip, ip;
   struct hostent *h;
@@ -52,6 +55,8 @@ int main(int argc, char** argv){
 
   /*atribuir os parametros a uma variavel message_server*/
   ms = init_message_server( name, upt, tpt, ip);
+
+  strcpy(msg, "GET_SERVERS");
 
   /*definir parametros opcionais, caso nao sejam dados na invocacao*/
   if((h = gethostbyname("tejo.tecnico.ulisboa.pt")) == NULL) {
@@ -104,6 +109,7 @@ int main(int argc, char** argv){
 
   printf(">> ");
   while(fgets(line, LINE_MAX, stdin) != NULL){
+  	memset(buffer, 0, sizeof(buffer));
 
     reset_buffer(buffer);
 
@@ -126,7 +132,7 @@ int main(int argc, char** argv){
       if( n == -1){
         exit(1);
       }
-      printf("%s\n", buffer);
+      	printf("%s", buffer);
 
     }
     else if( !strcmp( line, "show_messages\n")){
