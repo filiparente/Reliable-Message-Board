@@ -1,3 +1,5 @@
+#include "msgserv.h"
+#include "tcp.h"
 #include "UDPserver.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,40 +11,36 @@
 #include <errno.h>
 #include <sys/select.h>
 #include <sys/time.h>
-
+#include <time.h>
 
 #define LINE_MAX 50
-
-typedef struct message_server{
-  char *name;
-  u_int16_t udp_port;
-  u_int16_t tcp_port;
-  struct in_addr ip_addr;
-}message_server;
-
-void reset_buffer( char** );
-struct message_server init_message_server(char*, int, int, struct in_addr);
+#define MAX_NAME 20
 
 int main(int argc, char** argv){
 
   char *name;
   char line[50], msg[100], join_msg[100], buffer[1000];
   int upt = 0, tpt = 0;
-  int i, n=0;
+  int i, n=0, k=0;
   int m, r, sipt, addrlen;
-  int socket_udp_c, maxfd, counter;
+  int socket_udp_c, *socket_tcp_c, maxfd, counter;
+  int n_servidores_ativos=0;
+  MESSAGE_SERVER * others_ms;
   fd_set readfds;
   struct timeval timeout;
   struct in_addr *siip, ip;
   struct hostent *h;
-  struct sockaddr_in sid; /*estruturas para os servidores de identidades e de mensagens*/
-  struct message_server ms;
+  struct sockaddr_in sid, *ms ; /*estruturas para os servidores de identidades e de mensagens*/
+  MESSAGE_SERVER my_server;
   long elapsed_time=0;
+  time_t t;
 
   if( argc < 9 ){
     printf("invalid number of arguments\n");
     exit(-1);
   }
+
+  srand((unsigned) time(&t));
 
   name = (char*)malloc(sizeof(argv[2]+1)*sizeof(char));
 /*  buffer = (char*)malloc(1000*sizeof(char));*/
@@ -55,7 +53,8 @@ int main(int argc, char** argv){
   }
 
   /*atribuir os parametros a uma variavel message_server*/
-  ms = init_message_server( name, upt, tpt, ip);
+  my_server = new_message_server(sizeof(name));
+  my_server = fill_message_server( my_server, name, upt, tpt, ip);
 
   strcpy(msg, "GET_SERVERS");
 
@@ -92,14 +91,58 @@ int main(int argc, char** argv){
   fflush(stdout);
   while(fgets(line, LINE_MAX, stdin) != NULL){
   		if(!strcmp( line, "join\n" )){
-  				socket_udp_c = new_socket( siip , sipt , &sid );
-          snprintf( join_msg, sizeof(join_msg), "%s %s;%s;%d;%d", "REG", ms.name, inet_ntoa(ms.ip_addr), ms.udp_port, ms.tcp_port );
-  				n = sendto( socket_udp_c, join_msg, strlen(join_msg), 0, (struct sockaddr*)&sid, sizeof(sid) );
-  				printf(">> ");
-          fflush(stdout);
-          if( n == -1 ){
-  					exit(1);
-  				}
+
+          /*AFTER THE JOIN COMMAND:*/
+          /* 1) a new socket is creted*/
+          socket_udp_c = new_socket( siip , sipt , &sid );
+
+          snprintf( join_msg, sizeof(join_msg), "%s %s;%s;%d;%d", "REG", my_server.name, inet_ntoa(my_server.ip_addr), my_server.udp_port, my_server.tcp_port );
+
+          /* 2) a REG message is sent to the ID server*/
+          n = sendto( socket_udp_c, join_msg, strlen(join_msg), 0, (struct sockaddr*)&sid, sizeof(sid) );
+          if( n == -1){
+            printf( "sendto: %s\n", strerror( errno ) );
+            exit(1);
+          }
+
+          /* 3) a GET_SERVERS message is sent to the ID server*/
+          strcpy(msg, "GET_SERVERS");
+          n = sendto( socket_udp_c, msg, strlen(msg)+1, 0, (struct sockaddr*)&sid, sizeof(sid) );
+          if( n == -1){
+            printf( "sendto: %s\n", strerror( errno ) );
+            exit(1);
+          }
+
+          addrlen = sizeof(sid);
+          n = recvfrom( socket_udp_c, buffer, 1000, 0, (struct sockaddr*)&sid, &addrlen );
+          if( n == -1){
+            printf( "recvfrom: %s\n", strerror( errno ) );
+            exit(1);
+          }
+
+          /* 4) after receiving the online msgervers list a tcp session is established
+           with each one*/
+           n_servidores_ativos = new_ms_array( buffer, my_server.name, &others_ms );
+
+           ms = ( struct sockaddr_in * )malloc( n_servidores_ativos * sizeof( struct sockaddr_in ) );
+           socket_tcp_c = ( int* )malloc( n_servidores_ativos * sizeof( int ) );
+
+           for(k=0; k<n_servidores_ativos; k++){
+           /*  printf("servidor %d: %s %s %d %d\n", k+1, others_ms[k].name, inet_ntoa(others_ms[k].ip_addr), others_ms[k].udp_port, others_ms[k].tcp_port);*/
+             socket_tcp_c[k] = new_tcp_session_c( &(others_ms[k].ip_addr), others_ms[k].tcp_port, &ms[k]);
+           }
+
+           /* 5) gets the history of messages from a random server online, by sending a SGET_MESSAGES message*/
+           k=rand()%n_servidores_ativos;
+           send_tcp_message("SGET_MESSAGES",socket_tcp_c[k]);
+
+           memset(buffer, 0, sizeof(buffer));
+           read_tcp_message(buffer, socket_tcp_c[k]);
+
+           printf("mensagens:\n %s\n", buffer);
+           printf(">> ");
+           fflush(stdout);
+
           break;
   		}
       else if( !strcmp( line, "exit\n" ) ){
@@ -169,6 +212,7 @@ int main(int argc, char** argv){
           printf("received show_messages\n");
           printf(">> ");
           fflush(stdout);
+
       }
       else{
         printf("Error: command not defined\n");
@@ -180,18 +224,20 @@ int main(int argc, char** argv){
     /*a leitura nao tem de estar dentro do if fgets porque so depende de receber a mensagem*/
     if(FD_ISSET( socket_udp_c, &readfds )){
       addrlen = sizeof(sid);
-      fflush(stdout);
       n = recvfrom( socket_udp_c, buffer, 1000, 0, (struct sockaddr*)&sid, &addrlen );
-
       if( n == -1){
+        printf( "recvfrom: %s\n", strerror( errno ) );
         exit(1);
       }
       printf("%s", buffer);
-
       printf(">> ");
       fflush(stdout);
-    }
+
+      }
+
   }
+
+
 
   if( close(socket_udp_c) == 0){
     printf("close socket: %s\n", strerror(errno) );
@@ -207,10 +253,29 @@ void reset_buffer(char** buffer){
 }
 
 /*initializes a message_server struct*/
-struct message_server init_message_server(char* name, int upt, int tpt, struct in_addr ip ){
-    struct message_server ms;
+MESSAGE_SERVER new_message_server(int size){
 
-    ms.name = (char*)malloc(sizeof(name)*sizeof(char));
+    MESSAGE_SERVER ms;
+    ms.name = (char*)malloc( size * sizeof( char ) );
+
+    return ms;
+}
+
+MESSAGE_SERVER init_message_server(MESSAGE_SERVER ms){
+
+    strcpy( ms.name , "-" );
+    ms.udp_port = -1;
+    ms.tcp_port = -1;
+    if( memset(&ms.ip_addr, 0, sizeof(struct in_addr)) == NULL){
+      printf("ERRO: inicializacao MESSAGE_SERVER\n");
+      exit(1);
+    }
+
+    return ms;
+}
+
+
+MESSAGE_SERVER fill_message_server(MESSAGE_SERVER ms, char* name, int upt, int tpt, struct in_addr ip ){
 
     strcpy( ms.name , name );
     ms.udp_port = upt;
@@ -218,5 +283,51 @@ struct message_server init_message_server(char* name, int upt, int tpt, struct i
     ms.ip_addr = ip;
 
     return ms;
+}
 
+int new_ms_array(char* buffer, char* our_name, MESSAGE_SERVER ** others_ms){
+  char *tok;
+  char *delims = "\n";
+  int i=0, j=0;
+  char**name_servers, **ip;
+  int *port_udp, *port_tcp;
+  struct in_addr ms_ip;
+
+/*Alocaçoes*/
+  name_servers = ( char** )malloc( 20 * sizeof( char* ) );
+  for(j=0; j<20; j++)
+    name_servers[j] = ( char* )malloc( 20 * sizeof( char ) );
+
+  ip=(char**)malloc(20*sizeof(char*));
+  for(j=0; j<20; j++)
+    ip[j]=(char*)malloc(50*sizeof(char));
+
+  port_udp=(int*)malloc(20*sizeof(int));
+  port_tcp=(int*)malloc(20*sizeof(int));
+
+  (*others_ms)=(MESSAGE_SERVER*)malloc(20*sizeof(MESSAGE_SERVER));
+
+  for(i=0 ; i<20 ; i++){
+      (*others_ms)[i] = new_message_server(MAX_NAME);
+      (*others_ms)[i] = init_message_server((*others_ms)[i]);
+  }
+
+  tok = strtok(buffer, delims);
+
+  for( i=0 ; ( tok = strtok( NULL, delims ) ) != NULL ; ) {
+
+    // process the line
+    sscanf(tok, "%[^;]; %[^;]; %d; %d", name_servers[i], ip[i], &port_udp[i], &port_tcp[i]);
+
+    if(!inet_aton(ip[i], &ms_ip)){
+      printf("erro no inet_aton");
+      exit(1);
+    }
+    if(strcmp(name_servers[i], our_name)){
+      (*others_ms)[i] = fill_message_server( (*others_ms)[i], name_servers[i], port_udp[i], port_tcp[i], ms_ip);
+      i++;
+    }
+  }
+
+  return(i);
 }

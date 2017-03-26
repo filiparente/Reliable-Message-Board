@@ -28,7 +28,7 @@ int new_socket(struct in_addr * ip, int port, struct sockaddr_in *addr){
 
   int fd;
 
-   /*AF_INET diz que ´e uma socket de internet, podia ser uma socket de UNIX*/
+    /*AF_INET diz que ´e uma socket de internet, podia ser uma socket de UNIX*/
     /*SOCK_DGRAM diz que ´e um datagram socket*/
     /* 0 protocolo pedido*/
     /*retorna um inteiro nao negativo se obtiver sucesso*/
