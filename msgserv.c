@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/select.h>
+#include <sys/time.h>
 
 
 #define LINE_MAX 50
@@ -19,20 +20,19 @@ typedef struct message_server{
   struct in_addr ip_addr;
 }message_server;
 
-void reset_buffer( char* );
+void reset_buffer( char** );
 struct message_server init_message_server(char*, int, int, struct in_addr);
 
 int main(int argc, char** argv){
 
   char *name;
-  char line[50], msg[100], join_msg[100], buffer[1000]="0";
+  char line[50], msg[100], join_msg[100], buffer[1000];
   int upt = 0, tpt = 0;
   int i, n=0;
   int m, r, sipt, addrlen;
-  int socket_udp_c;
-  fd_set readfds;
+  int socket_udp_c, maxfd, counter;
+  fd_set readfds, writefds;
   struct timeval timeout;
-
   struct in_addr *siip, ip;
   struct hostent *h;
   struct sockaddr_in sid; /*estruturas para os servidores de identidades e de mensagens*/
@@ -44,8 +44,8 @@ int main(int argc, char** argv){
   }
 
   name = (char*)malloc(sizeof(argv[2]+1)*sizeof(char));
-  ms.name = (char*)malloc(sizeof(argv[2]+1)*sizeof(char));
-/*  struct in_addr *ip;  struct in_addr *ip;*/
+/*  buffer = (char*)malloc(1000*sizeof(char));*/
+  /*  struct in_addr *ip;  struct in_addr *ip;*/
   strcpy( name , argv[2] );
   upt = atoi( argv[6] );
   tpt = atoi( argv[8] );
@@ -88,12 +88,15 @@ int main(int argc, char** argv){
   }
 
   printf(">> ");
+  fflush(stdout);
   while(fgets(line, LINE_MAX, stdin) != NULL){
   		if(!strcmp( line, "join\n" )){
   				socket_udp_c = new_socket( siip , sipt , &sid );
           snprintf( join_msg, sizeof(join_msg), "%s %s;%s;%d;%d", "REG", ms.name, inet_ntoa(ms.ip_addr), ms.udp_port, ms.tcp_port );
   				n = sendto( socket_udp_c, join_msg, strlen(join_msg), 0, (struct sockaddr*)&sid, sizeof(sid) );
-  				if( n == -1 ){
+  				printf(">> ");
+          fflush(stdout);
+          if( n == -1 ){
   					exit(1);
   				}
           break;
@@ -103,49 +106,95 @@ int main(int argc, char** argv){
       }
       else{
         printf("Error: command not defined\n");
+        fflush(stdout);
       }
       printf(">> ");
+      fflush(stdout);
   }
 
-  printf(">> ");
-  while(fgets(line, LINE_MAX, stdin) != NULL){
-  	memset(buffer, 0, sizeof(buffer));
+  while(1){
+    /*reset_buffer(&buffer);*/
+    memset(buffer, 0, sizeof(buffer));
 
-    reset_buffer(buffer);
 
-    if( !strcmp( line, "exit\n" )){
-      if( close(socket_udp_c) == 0){
-        printf("close socket: %s\n", strerror(errno) );
-        exit(1);
-      }
+    FD_ZERO(&readfds);
+    FD_ZERO(&writefds);
+    FD_SET(socket_udp_c, &readfds);
+    FD_SET(socket_udp_c, &writefds);
+    FD_SET(STDIN_FILENO, &readfds);
+
+    maxfd = socket_udp_c; /*porque STDIN_FILENO=0*/
+
+    timeout.tv_sec = r;
+    timeout.tv_usec = 0;
+
+    counter = select( maxfd+1, &readfds, &writefds, (fd_set*)NULL, &timeout );
+
+    if(counter == -1){
+      printf("select: %s\n", strerror(errno) );
+      exit(1);
     }
 
-    else if( !strcmp( line, "show_servers\n")){
-      strcpy(msg, "GET_SERVERS");
-      n = sendto( socket_udp_c, msg, strlen(msg)+1, 0, (struct sockaddr*)&sid, sizeof(sid) );
+    if(counter == 0 ){
+      printf("timeout\n");
+      fflush(stdout);
+      n = sendto( socket_udp_c, join_msg, strlen(join_msg), 0, (struct sockaddr*)&sid, sizeof(sid) );
       if( n == -1 ){
         exit(1);
       }
+    }
 
+    if(FD_ISSET( STDIN_FILENO, &readfds )){
+      printf(">> ");
+      fflush(stdout);
+      fgets( line, LINE_MAX, stdin );
+      /*os comandos do teclado exit, GET_SERVERS e GET_MESSAGES so podem acontecer depois
+        de uma leitura do teclado*/
+      if( !strcmp( line, "exit\n" )){
+        if( close( socket_udp_c ) == 0 ){
+          printf( "close socket: %s\n", strerror( errno ) );
+          exit( 1 );
+        }
+      }
+
+      else if( !strcmp( line, "show_servers\n")){
+        if(FD_ISSET( socket_udp_c, &writefds )){
+          strcpy(msg, "GET_SERVERS");
+          n = sendto( socket_udp_c, msg, strlen(msg)+1, 0, (struct sockaddr*)&sid, sizeof(sid) );
+          if( n == -1 ){
+            exit(1);
+          }
+        }
+      }
+      else if( !strcmp( line, "show_messages\n")){
+          printf("received show_messages\n");
+          fflush(stdout);
+      }
+      else{
+        printf("Error: command not defined\n");
+        printf(">> ");
+        fflush(stdout);
+      }
+    }
+
+    /*a leitura nao tem de estar dentro do if fgets porque so depende de receber a mensagem*/
+    if(FD_ISSET( socket_udp_c, &readfds )){
       addrlen = sizeof(sid);
+      fflush(stdout);
       n = recvfrom( socket_udp_c, buffer, 1000, 0, (struct sockaddr*)&sid, &addrlen );
+
       if( n == -1){
         exit(1);
       }
-      	printf("%s", buffer);
+      printf("%s", buffer);
 
+      printf(">> ");
+      fflush(stdout);
     }
-    else if( !strcmp( line, "show_messages\n")){
-        printf("received show_messages\n");
-    }
-    else{
-      printf("Error: command not defined\n");
-    }
-    printf(">> ");
   }
 
   if( close(socket_udp_c) == 0){
-    printf("gethostbyname: %s\n", strerror(errno) );
+    printf("close socket: %s\n", strerror(errno) );
     exit(1);
   }
   return(0);
@@ -153,13 +202,15 @@ int main(int argc, char** argv){
 }
 
 /*resets the message receiving buffer*/
-void reset_buffer(char* buffer){
-    memset(buffer, 0, sizeof(buffer));
+void reset_buffer(char** buffer){
+    memset(*buffer, 0, sizeof(*buffer));
 }
 
 /*initializaes a message_server struct*/
 struct message_server init_message_server(char* name, int upt, int tpt, struct in_addr ip ){
     struct message_server ms;
+
+    ms.name = (char*)malloc(sizeof(name)*sizeof(char));
 
     strcpy( ms.name , name );
     ms.udp_port = upt;
