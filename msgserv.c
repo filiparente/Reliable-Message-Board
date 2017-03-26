@@ -31,12 +31,13 @@ int main(int argc, char** argv){
   int i, n=0;
   int m, r, sipt, addrlen;
   int socket_udp_c, maxfd, counter;
-  fd_set readfds, writefds;
+  fd_set readfds;
   struct timeval timeout;
   struct in_addr *siip, ip;
   struct hostent *h;
   struct sockaddr_in sid; /*estruturas para os servidores de identidades e de mensagens*/
   struct message_server ms;
+  long elapsed_time=0;
 
   if( argc < 9 ){
     printf("invalid number of arguments\n");
@@ -118,9 +119,7 @@ int main(int argc, char** argv){
 
 
     FD_ZERO(&readfds);
-    FD_ZERO(&writefds);
     FD_SET(socket_udp_c, &readfds);
-    FD_SET(socket_udp_c, &writefds);
     FD_SET(STDIN_FILENO, &readfds);
 
     maxfd = socket_udp_c; /*porque STDIN_FILENO=0*/
@@ -128,16 +127,16 @@ int main(int argc, char** argv){
     timeout.tv_sec = r;
     timeout.tv_usec = 0;
 
-    counter = select( maxfd+1, &readfds, &writefds, (fd_set*)NULL, &timeout );
+    counter = select( maxfd+1, &readfds, (fd_set*)NULL, (fd_set*)NULL, &timeout );
 
     if(counter == -1){
       printf("select: %s\n", strerror(errno) );
       exit(1);
     }
 
-    if(counter == 0 ){
-      printf("timeout\n");
-      fflush(stdout);
+    elapsed_time += (r-timeout.tv_sec);
+    if(elapsed_time >= r ){
+      elapsed_time-=r;
       n = sendto( socket_udp_c, join_msg, strlen(join_msg), 0, (struct sockaddr*)&sid, sizeof(sid) );
       if( n == -1 ){
         exit(1);
@@ -145,6 +144,7 @@ int main(int argc, char** argv){
     }
 
     if(FD_ISSET( STDIN_FILENO, &readfds )){
+
       printf(">> ");
       fflush(stdout);
       fgets( line, LINE_MAX, stdin );
@@ -158,16 +158,16 @@ int main(int argc, char** argv){
       }
 
       else if( !strcmp( line, "show_servers\n")){
-        if(FD_ISSET( socket_udp_c, &writefds )){
           strcpy(msg, "GET_SERVERS");
           n = sendto( socket_udp_c, msg, strlen(msg)+1, 0, (struct sockaddr*)&sid, sizeof(sid) );
           if( n == -1 ){
             exit(1);
           }
-        }
+
       }
       else if( !strcmp( line, "show_messages\n")){
           printf("received show_messages\n");
+          printf(">> ");
           fflush(stdout);
       }
       else{
@@ -206,7 +206,7 @@ void reset_buffer(char** buffer){
     memset(*buffer, 0, sizeof(*buffer));
 }
 
-/*initializaes a message_server struct*/
+/*initializes a message_server struct*/
 struct message_server init_message_server(char* name, int upt, int tpt, struct in_addr ip ){
     struct message_server ms;
 
