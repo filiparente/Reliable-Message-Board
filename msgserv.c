@@ -239,7 +239,7 @@ int main(int argc, char** argv){
 
 
 
-  if( close(socket_udp_c) == 0){
+  if( close(socket_udp_c) == -1){
     printf("close socket: %s\n", strerror(errno) );
     exit(1);
   }
