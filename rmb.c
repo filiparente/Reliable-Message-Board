@@ -116,7 +116,11 @@ int main(int argc, char ** argv)
 						printf(">> ");
 						continue;
 					}
-					k=rand()%n_servidores_ativos;
+					/*k=rand()%n_servidores_ativos;*/
+
+					for(k=0; k<n_servidores_ativos;k++){
+						if(!strcmp( OnlineMsgServers[k].name, "HODOR") ) break;
+					}
 
 					socket_msgServ = new_socket( &(OnlineMsgServers[k].ip_addr) , OnlineMsgServers[k].udp_port , &user_msgserver );
 

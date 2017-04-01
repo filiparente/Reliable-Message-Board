@@ -12,6 +12,7 @@
 #include <sys/select.h>
 #include <sys/time.h>
 #include <time.h>
+#include <sys/socket.h>
 
 #define LINE_MAX 50
 #define MAX_NAME 20
@@ -240,7 +241,7 @@ int main(int argc, char** argv){
 
     if( FD_ISSET( socket_rmb, &readfds) ){
       addrlen = sizeof(rmb);
-      memset(*buffer, 0, sizeof(*buffer));
+      memset(buffer, 0, sizeof(*buffer));
       n = recvfrom( socket_rmb, buffer, 1000, 0, (struct sockaddr*)&rmb, &addrlen );
       if( n == -1){
         printf( "recvfrom: %s\n", strerror( errno ) );

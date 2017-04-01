@@ -49,7 +49,7 @@ int new_socket(struct in_addr * ip, int port, struct sockaddr_in *addr){
   addr->sin_family=AF_INET;
   addr->sin_addr.s_addr = ip->s_addr;
 /*  addr->sin_addr.s_addr = inet_addr("192.168.0.1");*/
-  addr->sin_port=htons((u_short)port);
+  addr->sin_port=htonl((u_short)port);
 
   return(fd);
 }
