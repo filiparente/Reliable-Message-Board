@@ -15,6 +15,7 @@
 
 #define LINE_MAX 50
 #define MAX_NAME 20
+#define max(A,B) ((A)>=(B)?(A):(B))
 
 int main(int argc, char** argv){
 
@@ -23,15 +24,15 @@ int main(int argc, char** argv){
   int upt = 0, tpt = 0;
   int i, n=0, k=0;
   int m, r, sipt, addrlen;
-  int socket_udp_c, *socket_tcp_c, maxfd, counter;
+  int socket_idServ, socket_rmb, *socket_tcp_c, maxfd, counter;
   int n_servidores_ativos=0;
-  MESSAGE_SERVER * others_ms;
   fd_set readfds;
   struct timeval timeout;
   struct in_addr *siip, ip;
   struct hostent *h;
-  struct sockaddr_in sid, *ms ; /*estruturas para os servidores de identidades e de mensagens*/
+  struct sockaddr_in sid, rmb, *ms ; /*estruturas para os servidores de identidades e de mensagens*/
   MESSAGE_SERVER my_server;
+  MESSAGE_SERVER * others_ms;
   long elapsed_time=0;
   time_t t;
 
@@ -93,13 +94,14 @@ int main(int argc, char** argv){
   		if(!strcmp( line, "join\n" )){
 
           /*AFTER THE JOIN COMMAND:*/
-          /* 1) a new socket is creted*/
-          socket_udp_c = new_socket( siip , sipt , &sid );
+          /* 1) two new sockets are created, one for the ID server (as client), another to accept rmb requests (as server)*/
+          socket_idServ = new_socket( siip , sipt , &sid );
+          socket_rmb = new_udp_serv( INADDR_ANY , my_server.udp_port, &rmb);
 
           snprintf( join_msg, sizeof(join_msg), "%s %s;%s;%d;%d", "REG", my_server.name, inet_ntoa(my_server.ip_addr), my_server.udp_port, my_server.tcp_port );
 
           /* 2) a REG message is sent to the ID server*/
-          n = sendto( socket_udp_c, join_msg, strlen(join_msg), 0, (struct sockaddr*)&sid, sizeof(sid) );
+          n = sendto( socket_idServ, join_msg, strlen(join_msg), 0, (struct sockaddr*)&sid, sizeof(sid) );
           if( n == -1){
             printf( "sendto: %s\n", strerror( errno ) );
             exit(1);
@@ -107,14 +109,14 @@ int main(int argc, char** argv){
 
           /* 3) a GET_SERVERS message is sent to the ID server*/
           strcpy(msg, "GET_SERVERS");
-          n = sendto( socket_udp_c, msg, strlen(msg)+1, 0, (struct sockaddr*)&sid, sizeof(sid) );
+          n = sendto( socket_idServ, msg, strlen(msg)+1, 0, (struct sockaddr*)&sid, sizeof(sid) );
           if( n == -1){
             printf( "sendto: %s\n", strerror( errno ) );
             exit(1);
           }
 
           addrlen = sizeof(sid);
-          n = recvfrom( socket_udp_c, buffer, 1000, 0, (struct sockaddr*)&sid, &addrlen );
+          n = recvfrom( socket_idServ, buffer, 1000, 0, (struct sockaddr*)&sid, &addrlen );
           if( n == -1){
             printf( "recvfrom: %s\n", strerror( errno ) );
             exit(1);
@@ -162,10 +164,11 @@ int main(int argc, char** argv){
 
 
     FD_ZERO(&readfds);
-    FD_SET(socket_udp_c, &readfds);
+    FD_SET(socket_idServ, &readfds);
+    FD_SET(socket_rmb, &readfds);
     FD_SET(STDIN_FILENO, &readfds);
 
-    maxfd = socket_udp_c; /*porque STDIN_FILENO=0*/
+    maxfd = max(socket_idServ, socket_rmb); /*STDIN_FILENO = 0*/
 
     timeout.tv_sec = r;
     timeout.tv_usec = 0;
@@ -180,7 +183,7 @@ int main(int argc, char** argv){
     elapsed_time += (r-timeout.tv_sec);
     if(elapsed_time >= r ){
       elapsed_time-=r;
-      n = sendto( socket_udp_c, join_msg, strlen(join_msg), 0, (struct sockaddr*)&sid, sizeof(sid) );
+      n = sendto( socket_idServ, join_msg, strlen(join_msg), 0, (struct sockaddr*)&sid, sizeof(sid) );
       if( n == -1 ){
         exit(1);
       }
@@ -194,7 +197,7 @@ int main(int argc, char** argv){
       /*os comandos do teclado exit, GET_SERVERS e GET_MESSAGES so podem acontecer depois
         de uma leitura do teclado*/
       if( !strcmp( line, "exit\n" )){
-        if( close( socket_udp_c ) == 0 ){
+        if( close( socket_idServ ) == 0 ){
           printf( "close socket: %s\n", strerror( errno ) );
           exit( 1 );
         }
@@ -202,7 +205,7 @@ int main(int argc, char** argv){
 
       else if( !strcmp( line, "show_servers\n")){
           strcpy(msg, "GET_SERVERS");
-          n = sendto( socket_udp_c, msg, strlen(msg)+1, 0, (struct sockaddr*)&sid, sizeof(sid) );
+          n = sendto( socket_idServ, msg, strlen(msg)+1, 0, (struct sockaddr*)&sid, sizeof(sid) );
           if( n == -1 ){
             exit(1);
           }
@@ -222,9 +225,9 @@ int main(int argc, char** argv){
     }
 
     /*a leitura nao tem de estar dentro do if fgets porque so depende de receber a mensagem*/
-    if(FD_ISSET( socket_udp_c, &readfds )){
+    if(FD_ISSET( socket_idServ, &readfds )){
       addrlen = sizeof(sid);
-      n = recvfrom( socket_udp_c, buffer, 1000, 0, (struct sockaddr*)&sid, &addrlen );
+      n = recvfrom( socket_idServ, buffer, 1000, 0, (struct sockaddr*)&sid, &addrlen );
       if( n == -1){
         printf( "recvfrom: %s\n", strerror( errno ) );
         exit(1);
@@ -233,13 +236,26 @@ int main(int argc, char** argv){
       printf(">> ");
       fflush(stdout);
 
+    }
+
+    if( FD_ISSET( socket_rmb, &readfds) ){
+      addrlen = sizeof(rmb);
+      memset(*buffer, 0, sizeof(*buffer));
+      n = recvfrom( socket_rmb, buffer, 1000, 0, (struct sockaddr*)&rmb, &addrlen );
+      if( n == -1){
+        printf( "recvfrom: %s\n", strerror( errno ) );
+        exit(1);
       }
+
+      printf("%s\n", buffer );
+    }
+
 
   }
 
 
 
-  if( close(socket_udp_c) == -1){
+  if( close(socket_idServ) == -1){
     printf("close socket: %s\n", strerror(errno) );
     exit(1);
   }
