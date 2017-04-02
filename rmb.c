@@ -11,7 +11,7 @@
 #include <time.h>
 #include <signal.h>
 
-#define LINE_MAX 50
+#define LINE_MAX 200
 #define MAX_NAME 20
 
 typedef enum {FALSE=0, TRUE=1} bool;
@@ -26,9 +26,8 @@ int main(int argc, char ** argv)
 	int sipt = 59000; /*se o utilizador não puser nada, assume-se porto 59000 e IP adress do servidor tejo*/
 
 	char line[200], buffer[1000];
-	char*line_copy;
 	char message[200];
-	char tok[21];
+	char tok[200];
 	int socket_idServ, socket_msgServ;
 	int addrlen;
 	int n, k=0;
@@ -77,8 +76,8 @@ int main(int argc, char ** argv)
 				break;
 			}
 
-			line_copy=strdup(line);
-			if( invalid_command(line_copy, tok) ){
+
+			if( invalid_command(line, tok) ){
 				printf("Error: command not defined\n");
 				printf(">> ");
 			}
@@ -150,7 +149,7 @@ int main(int argc, char ** argv)
 					printf("%s", buffer);
 					printf(">> ");
 				}
-				else if(!strcmp( line_copy, "publish" ) ){
+				else if(!strcmp( tok, "publish" ) ){
 
 					extract_message(line);
 
@@ -166,10 +165,10 @@ int main(int argc, char ** argv)
 		          	n = sendto( socket_msgServ, message, strlen(message), 0, (struct sockaddr*)&user_msgserver, sizeof(user_msgserver) );
 
 		          	printf("enviei a mensagem %s para %s com ip %s e porto %d\n", message, OnlineMsgServers[k].name, inet_ntoa(user_msgserver.sin_addr), user_msgserver.sin_port);
-		          
+
 		          	if( n == -1){
 		            printf( "sendto: %s\n", strerror( errno ) );
-		            
+
 		           	 if( errno == EPIPE){
 									/*if the message server stops responding a new msgerver must be found*/
 									knowsOnlineMsgservs = FALSE;
@@ -179,7 +178,7 @@ int main(int argc, char ** argv)
 					printf(">> ");
 				}
 
-				memset(line_copy, 0, sizeof(line_copy));
+				memset(tok, 0, sizeof(tok));
 				memset(line, 0, sizeof(line));
 				/*show_latest_messages n*/
 			}
@@ -195,10 +194,10 @@ int invalid_command(char* line, char* tok){
 
 	if(!strcmp(line, "show_servers\n")) return(0); /*comando  valido*/
 
-	//strcpy(tok, line);
+	strcpy(tok, line);
 
-	//strcpy( tok, strtok(tok, delims) );
-	tok=strtok(line, delims);
+	strcpy( tok, strtok(tok, delims) );
+	/*tok=strtok(line, delims);*/
 
 	if(!strcmp(tok, "publish") || !strcmp(line, "show_latest_messages")) return(0); /*comando valido*/
 
