@@ -33,10 +33,10 @@ int new_socket(struct in_addr * ip, int port, struct sockaddr_in *addr){
     /* 0 protocolo pedido*/
     /*retorna um inteiro nao negativo se obtiver sucesso*/
 
-  if(ip==NULL){
+  /*if(ip==NULL){
     printf("Error: Undefined IP to create socket");
     exit(1);
-  }
+  }*/
 
   fd=socket(AF_INET,SOCK_DGRAM,0);
   if(fd==-1){
@@ -47,9 +47,16 @@ int new_socket(struct in_addr * ip, int port, struct sockaddr_in *addr){
   memset((void*)addr,(int)'\0',sizeof(*addr));
 
   addr->sin_family=AF_INET;
-  addr->sin_addr.s_addr = ip->s_addr;
-/*  addr->sin_addr.s_addr = inet_addr("192.168.0.1");*/
-  addr->sin_port=htonl((u_short)port);
+
+  if(ip==NULL)
+  {
+    addr->sin_addr.s_addr = htonl(INADDR_ANY);
+    /*addr->sin_addr.s_addr = inet_addr("192.168.0.1");*/
+  }
+  else 
+    addr->sin_addr.s_addr = ip->s_addr;
+    
+    addr->sin_port=htons((u_short)port);
 
   return(fd);
 }

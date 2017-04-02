@@ -26,6 +26,7 @@ int main(int argc, char ** argv)
 	int sipt = 59000; /*se o utilizador não puser nada, assume-se porto 59000 e IP adress do servidor tejo*/
 
 	char line[200], buffer[1000];
+	char*line_copy;
 	char message[200];
 	char tok[21];
 	int socket_idServ, socket_msgServ;
@@ -76,7 +77,8 @@ int main(int argc, char ** argv)
 				break;
 			}
 
-			if( invalid_command(line, tok) ){
+			line_copy=strdup(line);
+			if( invalid_command(line_copy, tok) ){
 				printf("Error: command not defined\n");
 				printf(">> ");
 			}
@@ -118,8 +120,9 @@ int main(int argc, char ** argv)
 					}
 					/*k=rand()%n_servidores_ativos;*/
 
-					for(k=0; k<n_servidores_ativos;k++){
-						if(!strcmp( OnlineMsgServers[k].name, "HODOR") ) break;
+					for(k=0; k<n_servidores_ativos;k++)
+					{
+						if(!strcmp(OnlineMsgServers[k].name, "FILIPA")) break;
 					}
 
 					socket_msgServ = new_socket( &(OnlineMsgServers[k].ip_addr) , OnlineMsgServers[k].udp_port , &user_msgserver );
@@ -147,22 +150,37 @@ int main(int argc, char ** argv)
 					printf("%s", buffer);
 					printf(">> ");
 				}
-				else if(!strcmp( tok, "publish" ) ){
+				else if(!strcmp( line_copy, "publish" ) ){
 
 					extract_message(line);
+
+					if(strlen(line)>140){
+						printf("Tamanho da mensagem superior ao permitido(140 caracteres)");
+						printf(">> ");
+						fflush(stdout);
+						continue;
+					}
+
 					snprintf( message, sizeof(message), "%s %s", "PUBLISH", line);
 
-          n = sendto( socket_msgServ, message, strlen(message), 0, (struct sockaddr*)&user_msgserver, sizeof(user_msgserver) );
-          if( n == -1){
-            printf( "sendto: %s\n", strerror( errno ) );
-            if( errno == EPIPE){
-							/*if the message server stops responding a new msgerver must be found*/
-							knowsOnlineMsgservs = FALSE;
-							hasMsgserv = FALSE;
+		          	n = sendto( socket_msgServ, message, strlen(message), 0, (struct sockaddr*)&user_msgserver, sizeof(user_msgserver) );
+
+		          	printf("enviei a mensagem %s para %s com ip %s e porto %d\n", message, OnlineMsgServers[k].name, inet_ntoa(user_msgserver.sin_addr), user_msgserver.sin_port);
+		          
+		          	if( n == -1){
+		            printf( "sendto: %s\n", strerror( errno ) );
+		            
+		           	 if( errno == EPIPE){
+									/*if the message server stops responding a new msgerver must be found*/
+									knowsOnlineMsgservs = FALSE;
+									hasMsgserv = FALSE;
 						}
-          }
-				printf(">> ");
+		          	}
+					printf(">> ");
 				}
+
+				memset(line_copy, 0, sizeof(line_copy));
+				memset(line, 0, sizeof(line));
 				/*show_latest_messages n*/
 			}
 	}
@@ -177,9 +195,10 @@ int invalid_command(char* line, char* tok){
 
 	if(!strcmp(line, "show_servers\n")) return(0); /*comando  valido*/
 
-	strcpy(tok, line);
+	//strcpy(tok, line);
 
-	strcpy( tok, strtok(tok, delims) );
+	//strcpy( tok, strtok(tok, delims) );
+	tok=strtok(line, delims);
 
 	if(!strcmp(tok, "publish") || !strcmp(line, "show_latest_messages")) return(0); /*comando valido*/
 
@@ -234,7 +253,7 @@ int get_OnlineMsgServers(char* buffer, MESSAGE_SERVER ** ms_array){
   for( i=0 ; ( tok = strtok( NULL, delims ) ) != NULL ; ) {
 
     // process the line
-    sscanf(tok, "%[^;]; %[^;]; %d; %d", name_servers[i], ip[i], &port_udp[i], &port_tcp[i]);
+    if(sscanf(tok, "%[^;]; %[^;]; %d; %d", name_servers[i], ip[i], &port_udp[i], &port_tcp[i])!=4) break;
 
     if(!inet_aton(ip[i], &ms_ip)){
       printf("erro no inet_aton");

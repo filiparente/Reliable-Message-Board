@@ -15,5 +15,6 @@
   MESSAGE_SERVER init_message_server( MESSAGE_SERVER );
   MESSAGE_SERVER fill_message_server( MESSAGE_SERVER, char* , int, int, struct in_addr );
   int new_ms_array(char*, char*, MESSAGE_SERVER**);
+  void extract_message(char * );
 
 #endif

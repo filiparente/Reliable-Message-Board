@@ -12,7 +12,6 @@
 #include <sys/select.h>
 #include <sys/time.h>
 #include <time.h>
-#include <sys/socket.h>
 
 #define LINE_MAX 50
 #define MAX_NAME 20
@@ -45,8 +44,10 @@ int main(int argc, char** argv){
   srand((unsigned) time(&t));
 
   name = (char*)malloc(sizeof(argv[2]+1)*sizeof(char));
+
 /*  buffer = (char*)malloc(1000*sizeof(char));*/
   /*  struct in_addr *ip;  struct in_addr *ip;*/
+
   strcpy( name , argv[2] );
   upt = atoi( argv[6] );
   tpt = atoi( argv[8] );
@@ -100,7 +101,7 @@ int main(int argc, char** argv){
           socket_rmb = new_udp_serv( INADDR_ANY , my_server.udp_port, &rmb);
 
           snprintf( join_msg, sizeof(join_msg), "%s %s;%s;%d;%d", "REG", my_server.name, inet_ntoa(my_server.ip_addr), my_server.udp_port, my_server.tcp_port );
-
+          
           /* 2) a REG message is sent to the ID server*/
           n = sendto( socket_idServ, join_msg, strlen(join_msg), 0, (struct sockaddr*)&sid, sizeof(sid) );
           if( n == -1){
@@ -123,26 +124,31 @@ int main(int argc, char** argv){
             exit(1);
           }
 
+
+
           /* 4) after receiving the online msgervers list a tcp session is established
            with each one*/
            n_servidores_ativos = new_ms_array( buffer, my_server.name, &others_ms );
+
+
+           printf("estão %d servidores ativos e são:\n", n_servidores_ativos);
 
            ms = ( struct sockaddr_in * )malloc( n_servidores_ativos * sizeof( struct sockaddr_in ) );
            socket_tcp_c = ( int* )malloc( n_servidores_ativos * sizeof( int ) );
 
            for(k=0; k<n_servidores_ativos; k++){
-           /*  printf("servidor %d: %s %s %d %d\n", k+1, others_ms[k].name, inet_ntoa(others_ms[k].ip_addr), others_ms[k].udp_port, others_ms[k].tcp_port);*/
+            printf("servidor %d: %s %s %d %d\n", k+1, others_ms[k].name, inet_ntoa(others_ms[k].ip_addr), others_ms[k].udp_port, others_ms[k].tcp_port);
              socket_tcp_c[k] = new_tcp_session_c( &(others_ms[k].ip_addr), others_ms[k].tcp_port, &ms[k]);
            }
 
            /* 5) gets the history of messages from a random server online, by sending a SGET_MESSAGES message*/
-           k=rand()%n_servidores_ativos;
-           send_tcp_message("SGET_MESSAGES",socket_tcp_c[k]);
+           /*k=rand()%n_servidores_ativos;
+           send_tcp_message("SGET_MESSAGES",socket_tcp_c[k]);*/
 
-           memset(buffer, 0, sizeof(buffer));
-           read_tcp_message(buffer, socket_tcp_c[k]);
+           /*memset(buffer, 0, sizeof(buffer));
+           read_tcp_message(buffer, socket_tcp_c[k]);*/
 
-           printf("mensagens:\n %s\n", buffer);
+           /*printf("mensagens:\n %s\n", buffer);*/
            printf(">> ");
            fflush(stdout);
 
@@ -169,7 +175,8 @@ int main(int argc, char** argv){
     FD_SET(socket_rmb, &readfds);
     FD_SET(STDIN_FILENO, &readfds);
 
-    maxfd = max(socket_idServ, socket_rmb); /*STDIN_FILENO = 0*/
+    //maxfd = socket_idServ;
+    maxfd=max(socket_idServ, socket_rmb); /*STDIN_FILENO = 0*/
 
     timeout.tv_sec = r;
     timeout.tv_usec = 0;
@@ -241,20 +248,21 @@ int main(int argc, char** argv){
 
     if( FD_ISSET( socket_rmb, &readfds) ){
       addrlen = sizeof(rmb);
-      memset(buffer, 0, sizeof(*buffer));
-      n = recvfrom( socket_rmb, buffer, 1000, 0, (struct sockaddr*)&rmb, &addrlen );
+      //memset(buffer, 0, sizeof(buffer));
+      n = recv( socket_rmb, buffer, 1000, 0 );
       if( n == -1){
         printf( "recvfrom: %s\n", strerror( errno ) );
         exit(1);
       }
+      extract_message(buffer);
 
-      printf("%s\n", buffer );
+      printf("Recebi uma mensagem: %s\n", buffer );
+      printf(">> ");
+      fflush(stdout);
     }
 
 
   }
-
-
 
   if( close(socket_idServ) == -1){
     printf("close socket: %s\n", strerror(errno) );
@@ -293,6 +301,9 @@ MESSAGE_SERVER init_message_server(MESSAGE_SERVER ms){
 
 
 MESSAGE_SERVER fill_message_server(MESSAGE_SERVER ms, char* name, int upt, int tpt, struct in_addr ip ){
+
+	ms.name = (char*)malloc(sizeof(sizeof(name))*sizeof(char));
+	/*  struct in_addr *ip;  struct in_addr *ip;*/
 
     strcpy( ms.name , name );
     ms.udp_port = upt;
@@ -334,7 +345,7 @@ int new_ms_array(char* buffer, char* our_name, MESSAGE_SERVER ** others_ms){
   for( i=0 ; ( tok = strtok( NULL, delims ) ) != NULL ; ) {
 
     // process the line
-    sscanf(tok, "%[^;]; %[^;]; %d; %d", name_servers[i], ip[i], &port_udp[i], &port_tcp[i]);
+    if(sscanf(tok, "%[^;]; %[^;]; %d; %d", name_servers[i], ip[i], &port_udp[i], &port_tcp[i]) != 4) break;
 
     if(!inet_aton(ip[i], &ms_ip)){
       printf("erro no inet_aton");
@@ -347,4 +358,18 @@ int new_ms_array(char* buffer, char* our_name, MESSAGE_SERVER ** others_ms){
   }
 
   return(i);
+}
+
+void extract_message(char * line)
+{
+	char* tok;
+
+	tok=strtok(line, " ");
+	if( (tok=strtok(NULL, "\n")) ==NULL )
+	{
+		printf("erro no strtok");
+		exit(1);
+	}
+
+	strcpy(line, tok);
 }
