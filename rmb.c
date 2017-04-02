@@ -10,6 +10,8 @@
 #include <unistd.h>
 #include <time.h>
 #include <signal.h>
+#include <sys/types.h>
+#include <sys/time.h>
 
 #define LINE_MAX 200
 #define MAX_NAME 20
@@ -29,13 +31,15 @@ int main(int argc, char ** argv)
 	char message[200];
 	char tok[200];
 	int socket_idServ, socket_msgServ;
-	int addrlen;
+	int addrlen, counter;
 	int n, k=0;
-	int n_servidores_ativos;
+	int n_servidores_ativos, n_msgs=0;
 	bool knowsOnlineMsgservs=FALSE;
 	bool hasMsgserv = FALSE;
 	void (*old_handler)(int); /*interrupt handler*/
 	time_t t;
+	fd_set readfds;
+	struct timeval timeout;
 
 	if( ( old_handler = signal( SIGPIPE, SIG_IGN ) ) == SIG_ERR ) exit(1);
 
@@ -151,7 +155,7 @@ int main(int argc, char ** argv)
 				}
 				else if(!strcmp( tok, "publish" ) ){
 
-					extract_message(line);
+					extract_message(line,0);
 
 					if(strlen(line)>140){
 						printf("Tamanho da mensagem superior ao permitido(140 caracteres)");
@@ -162,26 +166,85 @@ int main(int argc, char ** argv)
 
 					snprintf( message, sizeof(message), "%s %s", "PUBLISH", line);
 
-		          	n = sendto( socket_msgServ, message, strlen(message), 0, (struct sockaddr*)&user_msgserver, sizeof(user_msgserver) );
+		      n = sendto( socket_msgServ, message, strlen(message), 0, (struct sockaddr*)&user_msgserver, sizeof(user_msgserver) );
+		      if( n == -1){
+		         printf( "sendto: %s\n", strerror( errno ) );
 
-		          	printf("enviei a mensagem %s para %s com ip %s e porto %d\n", message, OnlineMsgServers[k].name, inet_ntoa(user_msgserver.sin_addr), user_msgserver.sin_port);
+		         if( errno == EPIPE){
+						/*if the message server stops responding a new msgerver must be found*/
+							knowsOnlineMsgservs = FALSE;
+							hasMsgserv = FALSE;
+						 }
+		      }
 
-		          	if( n == -1){
-		            printf( "sendto: %s\n", strerror( errno ) );
-
-		           	 if( errno == EPIPE){
-									/*if the message server stops responding a new msgerver must be found*/
-									knowsOnlineMsgservs = FALSE;
-									hasMsgserv = FALSE;
-						}
-		          	}
 					printf(">> ");
 				}
+				else if( !strcmp( tok, "show_latest_messages" ) ){
 
-				memset(tok, 0, sizeof(tok));
-				memset(line, 0, sizeof(line));
-				/*show_latest_messages n*/
+					sscanf( line, "%s %d", tok , &n_msgs );
+					snprintf( message, sizeof(message), "%s %d", "GET_MESSAGES", n_msgs);
+
+		      n = sendto( socket_msgServ, message, strlen(message), 0, (struct sockaddr*)&user_msgserver, sizeof(user_msgserver) );
+
+		      if( n == -1){
+		         printf( "sendto: %s\n", strerror( errno ) );
+		         if( errno == EPIPE){
+							knowsOnlineMsgservs = FALSE;
+							hasMsgserv = FALSE;
+						}
+		      }
+
+					addrlen=sizeof(user_msgserver);
+					memset(buffer, 0, sizeof(buffer));
+
+					while(1){
+
+						FD_ZERO(&readfds);
+						FD_SET(socket_msgServ, &readfds);
+
+						timeout.tv_sec = 10;
+						timeout.tv_usec = 0;
+
+						counter=select(socket_msgServ+1, &readfds, (fd_set*)NULL, (fd_set*)NULL, &timeout);
+
+						if(counter==-1){
+							printf("select error: %s", strerror(errno));
+							exit(1);
+						}
+
+						if(timeout.tv_sec == 0){
+								printf("Timeout: No message was received\n");
+								printf(">> ");
+								break;
+						}
+
+						if(FD_ISSET(socket_msgServ, &readfds)){
+							n = recvfrom( socket_msgServ, buffer, 1000, 0, (struct sockaddr*)&user_msgserver, &addrlen );
+							if( n == -1){
+								printf( "recvfrom: %s\n", strerror( errno ) );
+
+								if( errno == EPIPE){
+							 /*if the message server stops responding a new msgerver must be found*/
+							 	 knowsOnlineMsgservs = FALSE;
+								 hasMsgserv = FALSE;
+
+								}
+							}
+
+							extract_message(buffer, 1);
+							printf("%s", buffer);
+							printf(">> ");
+							break;
+					}
+				}
 			}
+
+			memset(tok, 0, sizeof(tok));
+			memset(line, 0, sizeof(line));
+			memset(message, 0, sizeof(message));
+			memset(buffer, 0, sizeof(buffer));
+
+		}
 	}
 
 	return(0);
@@ -199,26 +262,30 @@ int invalid_command(char* line, char* tok){
 	strcpy( tok, strtok(tok, delims) );
 	/*tok=strtok(line, delims);*/
 
-	if(!strcmp(tok, "publish") || !strcmp(line, "show_latest_messages")) return(0); /*comando valido*/
+	if(!strcmp(tok, "publish") || !strcmp(tok, "show_latest_messages")) return(0); /*comando valido*/
 
 	return(1);
 
 }
 
-void extract_message(char * line)
+void extract_message(char* line, int flag)
 {
 	char* tok;
+	char*delims=" ";
 
-	tok=strtok(line, " ");
-	if( (tok=strtok(NULL, "\n")) ==NULL )
+	if(flag)
 	{
-		printf("erro no strtok");
-		exit(1);
+		delims="\n";
 	}
 
+	tok=strtok(line, delims);
+
+	if( (tok = strtok( NULL, "\0" ) ) == NULL ){
+		printf("Strtok error\n");
+		exit(1);
+	}
 	strcpy(line, tok);
 }
-
 
 int get_OnlineMsgServers(char* buffer, MESSAGE_SERVER ** ms_array){
   char *tok;

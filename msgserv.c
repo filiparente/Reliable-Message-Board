@@ -20,13 +20,13 @@
 int main(int argc, char** argv){
 
   char *name;
-  char line[50], msg[100], join_msg[100], buffer[1000];
+  char line[50], msg[100], join_msg[100], buffer[1000], protocol_msg[20], content[100];
   int upt = 0, tpt = 0;
   int i, n=0, k=0;
-  int m, r, sipt, addrlen;
+  int m, r, sipt, addrlen, lc=0, n_msgs=0;
   int socket_idServ, socket_rmb, *socket_tcp_c, maxfd, counter;
   int n_servidores_ativos=0;
-  fd_set readfds;
+  fd_set readfds, writefds;
   struct timeval timeout;
   struct in_addr *siip, ip;
   struct hostent *h;
@@ -35,6 +35,7 @@ int main(int argc, char** argv){
   MESSAGE_SERVER * others_ms;
   long elapsed_time=0;
   time_t t;
+  char** history;
 
   if( argc < 9 ){
     printf("invalid number of arguments\n");
@@ -44,9 +45,6 @@ int main(int argc, char** argv){
   srand((unsigned) time(&t));
 
   name = (char*)malloc(sizeof(argv[2]+1)*sizeof(char));
-
-/*  buffer = (char*)malloc(1000*sizeof(char));*/
-  /*  struct in_addr *ip;  struct in_addr *ip;*/
 
   strcpy( name , argv[2] );
   upt = atoi( argv[6] );
@@ -90,6 +88,13 @@ int main(int argc, char** argv){
     }
   }
 
+  history = (char**)malloc( m * sizeof( char* ) );
+  for(i=0 ; i<m ; i++){
+
+    history[i] = ( char* )malloc( LINE_MAX * sizeof( char ) );
+    history[i] = "initial_string";
+  }
+
   printf(">> ");
   fflush(stdout);
   while(fgets(line, LINE_MAX, stdin) != NULL){
@@ -101,7 +106,7 @@ int main(int argc, char** argv){
           socket_rmb = new_udp_serv( INADDR_ANY , my_server.udp_port, &rmb);
 
           snprintf( join_msg, sizeof(join_msg), "%s %s;%s;%d;%d", "REG", my_server.name, inet_ntoa(my_server.ip_addr), my_server.udp_port, my_server.tcp_port );
-          
+
           /* 2) a REG message is sent to the ID server*/
           n = sendto( socket_idServ, join_msg, strlen(join_msg), 0, (struct sockaddr*)&sid, sizeof(sid) );
           if( n == -1){
@@ -124,20 +129,14 @@ int main(int argc, char** argv){
             exit(1);
           }
 
-
-
           /* 4) after receiving the online msgervers list a tcp session is established
            with each one*/
            n_servidores_ativos = new_ms_array( buffer, my_server.name, &others_ms );
-
-
-           printf("estão %d servidores ativos e são:\n", n_servidores_ativos);
 
            ms = ( struct sockaddr_in * )malloc( n_servidores_ativos * sizeof( struct sockaddr_in ) );
            socket_tcp_c = ( int* )malloc( n_servidores_ativos * sizeof( int ) );
 
            for(k=0; k<n_servidores_ativos; k++){
-            printf("servidor %d: %s %s %d %d\n", k+1, others_ms[k].name, inet_ntoa(others_ms[k].ip_addr), others_ms[k].udp_port, others_ms[k].tcp_port);
              socket_tcp_c[k] = new_tcp_session_c( &(others_ms[k].ip_addr), others_ms[k].tcp_port, &ms[k]);
            }
 
@@ -175,7 +174,6 @@ int main(int argc, char** argv){
     FD_SET(socket_rmb, &readfds);
     FD_SET(STDIN_FILENO, &readfds);
 
-    //maxfd = socket_idServ;
     maxfd=max(socket_idServ, socket_rmb); /*STDIN_FILENO = 0*/
 
     timeout.tv_sec = r;
@@ -204,11 +202,41 @@ int main(int argc, char** argv){
       fgets( line, LINE_MAX, stdin );
       /*os comandos do teclado exit, GET_SERVERS e GET_MESSAGES so podem acontecer depois
         de uma leitura do teclado*/
+
       if( !strcmp( line, "exit\n" )){
-        if( close( socket_idServ ) == 0 ){
-          printf( "close socket: %s\n", strerror( errno ) );
+        /*a saida fecham-se as sockets e liberta-se a memoria*/
+
+        if( close( socket_idServ ) != 0 ){
+          printf( "close socket idServ: %s\n", strerror( errno ) );
           exit( 1 );
         }
+        if( close( socket_rmb ) != 0 ){
+          printf( "close socket rmb: %s\n", strerror( errno ) );
+          exit( 1 );
+        }
+        for(k=0; k<n_servidores_ativos; k++){
+          if( close( socket_tcp_c[k] ) != 0 ){
+            printf( "close socket message server: %s\n", strerror( errno ) );
+            exit(1);
+          }
+        }
+        /*FREE's*/
+        free(name);
+        free(my_server.name);
+        for(i=0 ; i<m ; i++){
+          free(history[i]);
+        }
+        free(history);
+
+        for(i=0 ; i<20 ; i++){
+            free(others_ms[i].name);
+        }
+
+
+
+
+
+        return(0);
       }
 
       else if( !strcmp( line, "show_servers\n")){
@@ -249,16 +277,40 @@ int main(int argc, char** argv){
     if( FD_ISSET( socket_rmb, &readfds) ){
       addrlen = sizeof(rmb);
       //memset(buffer, 0, sizeof(buffer));
-      n = recv( socket_rmb, buffer, 1000, 0 );
+      n = recvfrom( socket_rmb, buffer, 1000, 0, (struct sockaddr*)&rmb, &addrlen );
       if( n == -1){
         printf( "recvfrom: %s\n", strerror( errno ) );
         exit(1);
       }
-      extract_message(buffer);
 
-      printf("Recebi uma mensagem: %s\n", buffer );
-      printf(">> ");
-      fflush(stdout);
+      sscanf(buffer, "%s %s", protocol_msg, content);
+
+
+      if( !strcmp( protocol_msg, "PUBLISH") ){
+
+        extract_message(buffer);
+        lc = save_message(buffer, history, lc);
+
+        printf("Recebi uma mensagem: %s", buffer );
+        printf(">> ");
+        fflush(stdout);
+      }
+      else if( !strcmp( protocol_msg, "GET_MESSAGES") ){
+
+          n_msgs = atoi(content);
+          strcpy(msg, "MESSAGES\n");
+
+          for( i=0 ; i<n_msgs ; i++){
+            strcat( msg, history[i]);
+          }
+        /*  if(FD_ISSET(socket_rmb, &writefds)){ */
+            n = sendto( socket_rmb, msg, strlen(msg)+1, 0, (struct sockaddr*)&rmb, sizeof(rmb) );
+            if( n == -1 ){
+              printf("nao consegui enviar a mensagem para o rmb");
+              exit(1);
+            }
+          /*}*/
+      }
     }
 
 
@@ -302,8 +354,7 @@ MESSAGE_SERVER init_message_server(MESSAGE_SERVER ms){
 
 MESSAGE_SERVER fill_message_server(MESSAGE_SERVER ms, char* name, int upt, int tpt, struct in_addr ip ){
 
-	ms.name = (char*)malloc(sizeof(sizeof(name))*sizeof(char));
-	/*  struct in_addr *ip;  struct in_addr *ip;*/
+	//ms.name = (char*)malloc(sizeof(sizeof(name))*sizeof(char));
 
     strcpy( ms.name , name );
     ms.udp_port = upt;
@@ -356,6 +407,16 @@ int new_ms_array(char* buffer, char* our_name, MESSAGE_SERVER ** others_ms){
       i++;
     }
   }
+  free(port_udp);
+  free(port_tcp);
+
+  for(j=0; j<20; j++)
+    free(name_servers[j]);
+  free(name_servers);
+
+  for(j=0; j<20; j++)
+    free(ip[j]);
+  free(ip);
 
   return(i);
 }
@@ -365,11 +426,18 @@ void extract_message(char * line)
 	char* tok;
 
 	tok=strtok(line, " ");
-	if( (tok=strtok(NULL, "\n")) ==NULL )
-	{
+	if( (tok=strtok(NULL, "\0")) == NULL ){
 		printf("erro no strtok");
 		exit(1);
 	}
 
 	strcpy(line, tok);
+}
+
+int save_message(char* buffer, char** history, int lc){
+  printf("tamanho history: %d\n", sizeof(history[lc]));
+  strcpy( history[lc] , buffer );
+  printf("tamanho history: %d\n", sizeof(history[lc]));
+
+  return(lc+1);
 }
