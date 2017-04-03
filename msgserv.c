@@ -15,6 +15,7 @@
 
 #define LINE_MAX 50
 #define MAX_NAME 20
+#define MAX_CONNECTIONS 20
 #define max(A,B) ((A)>=(B)?(A):(B))
 
 int main(int argc, char** argv){
@@ -24,19 +25,19 @@ int main(int argc, char** argv){
   int upt = 0, tpt = 0;
   int i, n=0, k=0;
   int m, r, sipt, addrlen, lc=0, n_msgs=0, sock_num=0;
-  int socket_idServ, socket_rmb, *socket_msgServ, maxfd, newfd, counter;
+  int socket_idServ, socket_rmb, *socket_ms_c, socket_ms_s,  maxfd, newfd, counter;
   int n_servidores_ativos=0;
   fd_set readfds, writefds;
   struct timeval timeout;
   struct in_addr *siip, ip;
   struct hostent *h;
-  struct sockaddr_in sid, rmb, *ms ; /*estruturas para os servidores de identidades e de mensagens*/
+  struct sockaddr_in sid, rmb, *ms, ms_s ; /*estruturas para os servidores de identidades e de mensagens*/
   MESSAGE_SERVER my_server;
   MESSAGE_SERVER * others_ms;
   long elapsed_time=0;
   time_t t;
   char** history;
-  int flag=1;
+  int flag_ms_s = 0;
 
   if( argc < 9 ){
     printf("invalid number of arguments\n");
@@ -157,36 +158,46 @@ int main(int argc, char** argv){
 		          }
 		       FD_ZERO(&readfds);
 		       maxfd=0;
-printf("%s", buffer);
+		       printf("%s", buffer);
 		       break;
 		  }
 	 }
-
 
           /* 4) after receiving the online msgervers list a tcp session is established
            with each one*/
            n_servidores_ativos = new_ms_array( buffer, my_server.name, &others_ms );
 
-           if(n_servidores_ativos!=0)
-           {
-	           ms = ( struct sockaddr_in * )malloc( n_servidores_ativos * sizeof( struct sockaddr_in ) );
-	           socket_msgServ = ( int* )malloc( n_servidores_ativos * sizeof( int ) );
-	       }
+           if(n_servidores_ativos!=0){
+             ms = ( struct sockaddr_in * )malloc( MAX_CONNECTIONS * sizeof( struct sockaddr_in ) );
+             socket_ms_c = ( int* )malloc( n_servidores_ativos * sizeof( int ) );
+           }
 
            for(k=0; k<n_servidores_ativos; k++){
-             socket_msgServ[k] = new_tcp_session_c( &(others_ms[k].ip_addr), others_ms[k].tcp_port, &ms[k]);
+             socket_ms_c[k] = new_tcp_session_c( &(others_ms[k].ip_addr), others_ms[k].tcp_port, &ms[k]);
+             flag_ms_s=1;
            }
 
 
            /* 5) gets the history of messages from a random server online, by sending a SGET_MESSAGES message*/
            /*k=rand()%n_servidores_ativos;*/
-          /* for(sock_num=0; sock_num<n_servidores_ativos;sock_num++){
- 						if(!strcmp(others_ms[sock_num].name, "FILIPA")) break;
-          } */
-          /* send_tcp_message("SGET_MESSAGES",socket_msgServ[sock_num]);
+           /*if(n_servidores_ativos!=0){
 
-           memset(buffer, 0, sizeof(buffer));
-           read_tcp_message(buffer, socket_msgServ[sock_num]);*/
+             for(sock_num=0; sock_num<n_servidores_ativos;sock_num++){
+   						if(!strcmp(others_ms[sock_num].name, "PORTALEGRE")) break;
+             }
+             send_tcp_message("SGET_MESSAGES",socket_ms_c[sock_num]);
+
+             memset(buffer, 0, sizeof(buffer));
+             read_tcp_message(buffer, socket_ms_c[sock_num]);
+
+             printf("historico recebido:\n%s", buffer);
+           }*/
+           /* 6) creates tcp_server sockets to accept requests form new msgservers */
+
+            /*    if(n_servidores_ativos < MAX_CONNECTIONS){
+            socket_ms_s = new_tcp_session_s( INADDR_ANY, 55000, &ms_s);
+          }*/
+
 
            printf(">> ");
            fflush(stdout);
@@ -212,10 +223,10 @@ printf("%s", buffer);
     FD_SET(socket_idServ, &readfds);
     FD_SET(socket_rmb, &readfds);
     FD_SET(STDIN_FILENO, &readfds);
-    if(n_servidores_ativos!=0) FD_SET(socket_msgServ[sock_num], &readfds);
+    if(flag_ms_s) FD_SET(socket_ms_s, &readfds);
 
     maxfd = max(socket_idServ, socket_rmb); /*STDIN_FILENO = 0*/
-  /*  maxfd = max(maxfd, socket_msgServ[sock_num]);*/
+  /*  maxfd = max(maxfd, socket_ms_c[sock_num]);*/
 
     timeout.tv_sec = r;
     timeout.tv_usec = 0;
@@ -236,15 +247,8 @@ printf("%s", buffer);
       }
     }
 
-  /*  for(sock_num=0; sock_num<n_servidores_ativos;sock_num++){
-     if(!strcmp(others_ms[sock_num].name, "FILIPA")) break;
-    }
-    if (sock_num == (n_servidores_ativos)) sock_num=-1; */
-
     if(FD_ISSET( STDIN_FILENO, &readfds )){
 
-      printf(">> ");
-      fflush(stdout);
       fgets( line, LINE_MAX, stdin );
       /*os comandos do teclado exit, GET_SERVERS e GET_MESSAGES so podem acontecer depois
         de uma leitura do teclado*/
@@ -261,7 +265,7 @@ printf("%s", buffer);
           exit( 1 );
         }
         for(k=0; k<n_servidores_ativos; k++){
-          if( close( socket_msgServ[k] ) != 0 ){
+          if( close( socket_ms_c[k] ) != 0 ){
             printf( "close socket message server: %s\n", strerror( errno ) );
             exit(1);
           }
@@ -276,9 +280,10 @@ printf("%s", buffer);
 
         for(i=0 ; i<20 ; i++){
             free(others_ms[i].name);
+
         }
         free(others_ms);
-        free(socket_msgServ);
+        free(socket_ms_c);
         free(ms);
 
         return(0);
@@ -303,6 +308,9 @@ printf("%s", buffer);
         printf(">> ");
         fflush(stdout);
       }
+      
+      printf(">> ");
+      fflush(stdout);
     }
 
     /*a leitura nao tem de estar dentro do if fgets porque so depende de receber a mensagem*/
@@ -355,33 +363,30 @@ printf("%s", buffer);
             }
       }
     }
-/*    if(sock_num!=-1){
-      if( FD_ISSET( socket_msgServ[sock_num], &readfds)){
+/*  if(flag_ms_s){
+      if( FD_ISSET( socket_ms_s, &readfds)){
         addrlen = sizeof( ms[sock_num] );
-        if( ( newfd = accept( socket_msgServ[sock_num], (struct sockaddr*)&ms[sock_num], &addrlen ) ) == -1 ) exit(1);
+        if( ( newfd = accept( socket_ms_c[sock_num], (struct sockaddr*)&ms[sock_num], &addrlen ) ) == -1 ) exit(1);
 
         memset(buffer, 0, sizeof(buffer));
         read_tcp_message( buffer, newfd );
 
         if( !strcmp("SGET_MESSAGES", buffer) ){
 
-          memset(msg, 0, sizeof(msg));
-          strcpy(msg, "SMESSAGES\n");
+        memset(msg, 0, sizeof(msg));
+        strcpy(msg, "SMESSAGES\n");
 
-          for( i=0 ; i<lc ; i++){
-            strcat( msg, history[i]);
-          }
+        for( i=0 ; i<lc ; i++){
+          strcat( msg, history[i]);
+        }
 
-          send_tcp_message( msg, newfd );
+        send_tcp_message( msg, newfd );
         }
       }
     }*/
   }
 
-  if( close(socket_idServ) == -1){
-    printf("close socket: %s\n", strerror(errno) );
-    exit(1);
-  }
+
   return(0);
 
 }
@@ -430,25 +435,25 @@ int new_ms_array(char* buffer, char* our_name, MESSAGE_SERVER ** others_ms){
   char *tok;
   char *delims = "\n";
   int i=0, j=0;
-  char**name_servers, **ip;
+  char **name_servers, **ip;
   int *port_udp, *port_tcp;
   struct in_addr ms_ip;
 
 /*Alocaçoes*/
-  name_servers = ( char** )malloc( 20 * sizeof( char* ) );
+  name_servers = ( char** )malloc( MAX_CONNECTIONS * sizeof( char* ) );
   for(j=0; j<20; j++)
-    name_servers[j] = ( char* )malloc( 20 * sizeof( char ) );
+    name_servers[j] = ( char* )malloc( MAX_NAME * sizeof( char ) );
 
-  ip=(char**)malloc(20*sizeof(char*));
-  for(j=0; j<20; j++)
+  ip=(char**)malloc( MAX_CONNECTIONS *sizeof(char*));
+  for(j=0; j < MAX_CONNECTIONS ; j++)
     ip[j]=(char*)malloc(50*sizeof(char));
 
-  port_udp=(int*)malloc(20*sizeof(int));
-  port_tcp=(int*)malloc(20*sizeof(int));
+  port_udp=(int*)malloc(MAX_CONNECTIONS*sizeof(int));
+  port_tcp=(int*)malloc(MAX_CONNECTIONS*sizeof(int));
 
-  (*others_ms)=(MESSAGE_SERVER*)malloc(20*sizeof(MESSAGE_SERVER));
+  (*others_ms)=(MESSAGE_SERVER*)malloc( MAX_CONNECTIONS * sizeof(MESSAGE_SERVER));
 
-  for(i=0 ; i<20 ; i++){
+  for(i=0 ; i< MAX_CONNECTIONS ; i++){
       (*others_ms)[i] = new_message_server(MAX_NAME);
       (*others_ms)[i] = init_message_server((*others_ms)[i]);
   }
@@ -472,12 +477,16 @@ int new_ms_array(char* buffer, char* our_name, MESSAGE_SERVER ** others_ms){
   free(port_udp);
   free(port_tcp);
 
-  for(j=0; j<20; j++)
+  for(j=0; j<20; j++){
     free(name_servers[j]);
+  }
+
   free(name_servers);
 
-  for(j=0; j<20; j++)
-    free(ip[j]);
+  for(j=0; j<20; j++){
+     free(ip[j]);
+  }
+
   free(ip);
 
   return(i);

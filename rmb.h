@@ -16,5 +16,6 @@
   int invalid_command(char*, char*);
   int get_OnlineMsgServers(char*, MESSAGE_SERVER **);
   void extract_message(char *, int);
+  int extract_command(char*, char*);
 
 #endif

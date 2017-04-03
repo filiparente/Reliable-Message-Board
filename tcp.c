@@ -32,7 +32,7 @@ int new_tcp_session_s( struct in_addr * ip, int port, struct sockaddr_in *addr){
   fd_tcp_s = new_socket(ip, port, addr);
   /*addr ´e a estrutura que tem os parametros do cliente*/
 
-  if( bind( fd_tcp_s, (struct sockaddr*)&addr, sizeof(addr) ) == -1 ){
+  if( bind( fd_tcp_s, (struct sockaddr*)addr, sizeof(addr) ) == -1 ){
     printf("bind: %s", strerror(errno));
     exit(1);
   }
