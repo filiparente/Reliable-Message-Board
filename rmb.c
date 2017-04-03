@@ -115,7 +115,7 @@ int main(int argc, char ** argv)
 					/*3) create an online msgservers array*/
 					n_servidores_ativos = get_OnlineMsgServers( buffer, &OnlineMsgServers );
 
-					/*de entre o numero de msgservers online escolhe um aleatorio para ser ligar*/
+					/*de entre o numero de msgservers online escolhe um aleatorio para se ligar*/
 					if(n_servidores_ativos==0){
 						printf("No server available, try again later\n");
 						printf(">> ");
@@ -125,7 +125,7 @@ int main(int argc, char ** argv)
 
 					for(k=0; k<n_servidores_ativos;k++)
 					{
-						if(!strcmp(OnlineMsgServers[k].name, "FILIPA")) break;
+						if(!strcmp(OnlineMsgServers[k].name, "MANEL")) break;
 					}
 
 					socket_msgServ = new_socket( &(OnlineMsgServers[k].ip_addr) , OnlineMsgServers[k].udp_port , &user_msgserver );
