@@ -36,6 +36,7 @@ int main(int argc, char** argv){
   long elapsed_time=0;
   time_t t;
   char** history;
+  int flag=1;
 
   if( argc < 9 ){
     printf("invalid number of arguments\n");
@@ -101,6 +102,7 @@ int main(int argc, char** argv){
           /*AFTER THE JOIN COMMAND:*/
           /* 1) two new sockets are created, one for the ID server (as client), another to accept rmb requests (as server)*/
           socket_idServ = new_socket( siip , sipt , &sid );
+
           socket_rmb = new_udp_serv( INADDR_ANY , my_server.udp_port, &rmb);
 
           snprintf( join_msg, sizeof(join_msg), "%s %s;%s;%d;%d", "REG", my_server.name, inet_ntoa(my_server.ip_addr), my_server.udp_port, my_server.tcp_port );
@@ -113,26 +115,63 @@ int main(int argc, char** argv){
           }
 
           /* 3) a GET_SERVERS message is sent to the ID server*/
-          strcpy(msg, "GET_SERVERS");
-          n = sendto( socket_idServ, msg, strlen(msg)+1, 0, (struct sockaddr*)&sid, sizeof(sid) );
-          if( n == -1){
-            printf( "sendto: %s\n", strerror( errno ) );
-            exit(1);
-          }
+	  
+	  strcpy(msg, "GET_SERVERS");
+	  n = sendto( socket_idServ, msg, strlen(msg)+1, 0, (struct sockaddr*)&sid, sizeof(sid) );
+	  if( n == -1){
+	    printf( "sendto: %s\n", strerror( errno ) );
+	    exit(1);
+	  }
 
-          addrlen = sizeof(sid);
-          n = recvfrom( socket_idServ, buffer, 1000, 0, (struct sockaddr*)&sid, &addrlen );
-          if( n == -1){
-            printf( "recvfrom: %s\n", strerror( errno ) );
-            exit(1);
-          }
+          while(1)
+          {
+	          FD_ZERO(&readfds);
+	          FD_SET(socket_idServ, &readfds);
+	        
+	          maxfd=socket_idServ;
+
+	          timeout.tv_sec=10;
+	          timeout.tv_usec=0;
+
+	          counter= select( maxfd+1, &readfds, (fd_set*)NULL, (fd_set*)NULL, &timeout );
+
+		      if(counter == -1){
+			      printf("select: %s\n", strerror(errno) );
+			      exit(1);
+			    }
+
+			  if(timeout.tv_sec==0)
+			  {
+			  	printf("timeout:%s", strerror(errno));
+			  	exit(1);
+			  }
+
+	          if(FD_ISSET(socket_idServ, &readfds))
+	          {
+		          addrlen = sizeof(sid);
+		          memset(buffer, 0, sizeof(buffer));
+		          n = recvfrom( socket_idServ, buffer, 1000, 0, (struct sockaddr*)&sid, &addrlen );
+		          if( n == -1){
+		            printf( "recvfrom: %s\n", strerror( errno ) );
+		            exit(1);
+		          }
+		       FD_ZERO(&readfds);
+		       maxfd=0;
+printf("%s", buffer);
+		       break;
+		  }
+	 }
+
 
           /* 4) after receiving the online msgervers list a tcp session is established
            with each one*/
            n_servidores_ativos = new_ms_array( buffer, my_server.name, &others_ms );
 
-           ms = ( struct sockaddr_in * )malloc( n_servidores_ativos * sizeof( struct sockaddr_in ) );
-           socket_msgServ = ( int* )malloc( n_servidores_ativos * sizeof( int ) );
+           if(n_servidores_ativos!=0)
+           {
+	           ms = ( struct sockaddr_in * )malloc( n_servidores_ativos * sizeof( struct sockaddr_in ) );
+	           socket_msgServ = ( int* )malloc( n_servidores_ativos * sizeof( int ) );
+	       }
 
            for(k=0; k<n_servidores_ativos; k++){
              socket_msgServ[k] = new_tcp_session_c( &(others_ms[k].ip_addr), others_ms[k].tcp_port, &ms[k]);
@@ -173,7 +212,7 @@ int main(int argc, char** argv){
     FD_SET(socket_idServ, &readfds);
     FD_SET(socket_rmb, &readfds);
     FD_SET(STDIN_FILENO, &readfds);
-    FD_SET(socket_msgServ[sock_num], &readfds);
+    if(n_servidores_ativos!=0) FD_SET(socket_msgServ[sock_num], &readfds);
 
     maxfd = max(socket_idServ, socket_rmb); /*STDIN_FILENO = 0*/
   /*  maxfd = max(maxfd, socket_msgServ[sock_num]);*/
@@ -238,6 +277,9 @@ int main(int argc, char** argv){
         for(i=0 ; i<20 ; i++){
             free(others_ms[i].name);
         }
+        free(others_ms);
+        free(socket_msgServ);
+        free(ms);
 
         return(0);
       }

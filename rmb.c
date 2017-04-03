@@ -40,6 +40,7 @@ int main(int argc, char ** argv)
 	time_t t;
 	fd_set readfds;
 	struct timeval timeout;
+	int flag_action=0;
 
 	if( ( old_handler = signal( SIGPIPE, SIG_IGN ) ) == SIG_ERR ) exit(1);
 
@@ -77,6 +78,23 @@ int main(int argc, char ** argv)
 
 	while(fgets(line, LINE_MAX, stdin) != NULL){
 			if(!strcmp( line, "exit\n" ) ){
+
+				if(flag_action){
+					for(i=0;i<20;i++){
+						free(OnlineMsgServers[i].name);
+					}
+					free(OnlineMsgServers);
+
+					if( close( socket_idServ ) != 0 ){
+			          printf( "close socket idServ: %s\n", strerror( errno ) );
+			          exit( 1 );
+			        }
+
+			        if( close( socket_msgServ ) != 0 ){
+			          printf( "close socket rmb: %s\n", strerror( errno ) );
+			          exit( 1 );
+			        }
+				}
 				break;
 			}
 
@@ -86,7 +104,7 @@ int main(int argc, char ** argv)
 				printf(">> ");
 			}
 			else{
-
+				flag_action=1;
 				if( knowsOnlineMsgservs == FALSE ){
 
 					socket_idServ = new_socket( siip , sipt , &sid );
@@ -328,6 +346,17 @@ int get_OnlineMsgServers(char* buffer, MESSAGE_SERVER ** ms_array){
       (*ms_array)[i] = fill_message_server( (*ms_array)[i], name_servers[i], port_udp[i], port_tcp[i], ms_ip);
       i++;
   }
+
+  free(port_udp);
+  free(port_tcp);
+
+  for(j=0; j<20; j++)
+    free(name_servers[j]);
+  free(name_servers);
+
+  for(j=0; j<20; j++)
+    free(ip[j]);
+  free(ip);
 
   return(i);
 }

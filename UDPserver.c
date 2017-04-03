@@ -54,7 +54,7 @@ int new_socket(struct in_addr * ip, int port, struct sockaddr_in *addr){
     /*addr->sin_addr.s_addr = inet_addr("192.168.0.1");*/
   }
   else 
-    addr->sin_addr.s_addr = ip->s_addr;
+    addr->sin_addr.s_addr = htonl(ip->s_addr);
     
     addr->sin_port=htons((u_short)port);
 
