@@ -16,6 +16,7 @@
 #define LINE_MAX 200
 #define MAX_NAME 20
 
+
 typedef enum {FALSE=0, TRUE=1} bool;
 
 int main(int argc, char ** argv)
@@ -27,9 +28,9 @@ int main(int argc, char ** argv)
 	struct hostent *h;
 	int sipt = 59000; /*se o utilizador não puser nada, assume-se porto 59000 e IP adress do servidor tejo*/
 
-	char line[200], buffer[1000];
+	char line[200], buffer[1000], command[20];
 	char message[200];
-	char tok[200];
+	char tok[LINE_MAX];
 	int socket_idServ, socket_msgServ;
 	int addrlen, counter;
 	int n, i, k=0;
@@ -77,7 +78,14 @@ int main(int argc, char ** argv)
 	printf(">> ");
 
 	while(fgets(line, LINE_MAX, stdin) != NULL){
-			if( !strcmp( line, "exit\n" ) ){
+
+			if( extract_command(line, command) == 1 ){
+				printf("Error: command not defined\n");
+				printf(">> ");
+				continue;
+			}
+
+			if( !strcmp( command, "exit\n" ) ){
 				if(flag_action){
 					for(i=0 ; i<20 ; i++){
 	            free(OnlineMsgServers[i].name);
@@ -85,192 +93,186 @@ int main(int argc, char ** argv)
 	        free(OnlineMsgServers);
 
 					if( close( socket_idServ ) != 0 ){
-	          printf( "close socket rmb: %s\n", strerror( errno ) );
+	          printf( "close socket idServ: %s\n", strerror( errno ) );
 	          exit( 1 );
 	        }
-					if( close( socket_msgServ ) != 0 ){
-	          printf( "close socket rmb: %s\n", strerror( errno ) );
+				/*  if( close( socket_msgServ ) != 0 ){
+	          printf( "close socket message_server: %s\n", strerror( errno ) );
 	          exit( 1 );
-	        }
+	        }*/
 
 				}
 				break;
 			}
 
+			flag_action = 1;
 
-			if( invalid_command(line, tok) ){
-				printf("Error: command not defined\n");
+			if( knowsOnlineMsgservs == FALSE ){
+
+				socket_idServ = new_socket( siip , sipt , &sid );
+
+				/*1) ask IDserv what msgservers are online*/
+				n = sendto( socket_idServ, "GET_SERVERS", strlen("GET_SERVERS"), 0, (struct sockaddr*)&sid, sizeof(sid) );
+				if( n == -1){
+					printf( "sendto: %s\n", strerror( errno ) );
+					exit(1);
+				}
+
+				/*2) read the answer, save it in a buffer */
+				memset(buffer, 0, sizeof(buffer));
+				addrlen = sizeof( sid );
+
+				n = recvfrom( socket_idServ, buffer, 1000, 0, (struct sockaddr*)&sid, &addrlen );
+				if( n == -1){
+					printf( "recvfrom: %s\n", strerror( errno ) );
+					exit(1);
+				}
+
+				knowsOnlineMsgservs = TRUE;
+			}
+
+			if( (hasMsgserv == FALSE) && (strcmp( command, "show_servers\n" )) ){
+				/*3) create an online msgservers array*/
+				n_servidores_ativos = get_OnlineMsgServers( buffer, &OnlineMsgServers );
+
+				/*de entre o numero de msgservers online escolhe um aleatorio para se ligar*/
+				if(n_servidores_ativos==0){
+					printf("No server available, try again later\n");
+					printf(">> ");
+					continue;
+				}
+				/*k=rand()%n_servidores_ativos;*/
+
+				for(k=0; k<n_servidores_ativos;k++)
+				{
+					if(!strcmp(OnlineMsgServers[k].name, "PORTALEGRE")) break;
+				}
+
+				socket_msgServ = new_socket( &(OnlineMsgServers[k].ip_addr) , OnlineMsgServers[k].udp_port , &user_msgserver );
+
+				hasMsgserv = TRUE;
+			}
+
+			if(!strcmp( command, "show_servers\n" ) ){
+
+				n = sendto( socket_idServ, "GET_SERVERS", strlen("GET_SERVERS"), 0, (struct sockaddr*)&sid, sizeof(sid) );
+				if( n == -1){
+					printf( "sendto: %s\n", strerror( errno ) );
+					exit(1);
+				}
+
+				memset(buffer, 0, sizeof(buffer));
+				addrlen = sizeof( sid );
+
+				n = recvfrom( socket_idServ, buffer, 1000, 0, (struct sockaddr*)&sid, &addrlen );
+				if( n == -1){
+					printf( "recvfrom: %s\n", strerror( errno ) );
+					exit(1);
+				}
+
+				printf("%s", buffer);
 				printf(">> ");
 			}
-			else{
+			else if(!strcmp( command, "publish" ) ){
 
-				flag_action=1;
+				extract_message(line,0);
 
-				if( knowsOnlineMsgservs == FALSE ){
-
-					socket_idServ = new_socket( siip , sipt , &sid );
-
-					/*1) ask IDserv what msgservers are online*/
-					n = sendto( socket_idServ, "GET_SERVERS", strlen("GET_SERVERS"), 0, (struct sockaddr*)&sid, sizeof(sid) );
-					if( n == -1){
-						printf( "sendto: %s\n", strerror( errno ) );
-						exit(1);
-					}
-
-					/*2) read the answer, save it in a buffer */
-					memset(buffer, 0, sizeof(buffer));
-					addrlen = sizeof( sid );
-
-					n = recvfrom( socket_idServ, buffer, 1000, 0, (struct sockaddr*)&sid, &addrlen );
-					if( n == -1){
-						printf( "recvfrom: %s\n", strerror( errno ) );
-						exit(1);
-					}
-
-					knowsOnlineMsgservs = TRUE;
-				}
-
-				if( (hasMsgserv == FALSE) && (strcmp( line, "show_servers\n" )) ){
-					/*3) create an online msgservers array*/
-					n_servidores_ativos = get_OnlineMsgServers( buffer, &OnlineMsgServers );
-
-					/*de entre o numero de msgservers online escolhe um aleatorio para se ligar*/
-					if(n_servidores_ativos==0){
-						printf("No server available, try again later\n");
-						printf(">> ");
-						continue;
-					}
-					/*k=rand()%n_servidores_ativos;*/
-
-					for(k=0; k<n_servidores_ativos;k++)
-					{
-						if(!strcmp(OnlineMsgServers[k].name, "TOMAR")) break;
-					}
-
-					socket_msgServ = new_socket( &(OnlineMsgServers[k].ip_addr) , OnlineMsgServers[k].udp_port , &user_msgserver );
-
-					hasMsgserv = TRUE;
-				}
-
-				if(!strcmp( line, "show_servers\n" ) ){
-
-					n = sendto( socket_idServ, "GET_SERVERS", strlen("GET_SERVERS"), 0, (struct sockaddr*)&sid, sizeof(sid) );
-					if( n == -1){
-						printf( "sendto: %s\n", strerror( errno ) );
-						exit(1);
-					}
-
-					memset(buffer, 0, sizeof(buffer));
-					addrlen = sizeof( sid );
-
-					n = recvfrom( socket_idServ, buffer, 1000, 0, (struct sockaddr*)&sid, &addrlen );
-					if( n == -1){
-						printf( "recvfrom: %s\n", strerror( errno ) );
-						exit(1);
-					}
-
-					printf("%s", buffer);
+				if(strlen(line)>140){
+					printf("Tamanho da mensagem superior ao permitido(140 caracteres)");
 					printf(">> ");
+					fflush(stdout);
+					continue;
 				}
-				else if(!strcmp( tok, "publish" ) ){
 
-					extract_message(line,0);
+				snprintf( message, sizeof(message), "%s %s", "PUBLISH", line);
 
-					if(strlen(line)>140){
-						printf("Tamanho da mensagem superior ao permitido(140 caracteres)");
-						printf(">> ");
-						fflush(stdout);
-						continue;
+	      n = sendto( socket_msgServ, message, strlen(message), 0, (struct sockaddr*)&user_msgserver, sizeof(user_msgserver) );
+	      if( n == -1){
+	         printf( "sendto: %s\n", strerror( errno ) );
+
+	         if( errno == EPIPE){
+						/*if the message server stops responding a new msgerver must be found*/
+						knowsOnlineMsgservs = FALSE;
+						hasMsgserv = FALSE;
+					 }
+	      }
+
+				printf(">> ");
+			}
+			else if( !strcmp( command, "show_latest_messages" ) ){
+
+				sscanf( line, "%s %d", tok , &n_msgs );
+				snprintf( message, sizeof(message), "%s %d", "GET_MESSAGES", n_msgs);
+
+	      n = sendto( socket_msgServ, message, strlen(message), 0, (struct sockaddr*)&user_msgserver, sizeof(user_msgserver) );
+
+	      if( n == -1){
+	         printf( "sendto: %s\n", strerror( errno ) );
+	         if( errno == EPIPE){
+						knowsOnlineMsgservs = FALSE;
+						hasMsgserv = FALSE;
+					}
+	      }
+
+				addrlen=sizeof(user_msgserver);
+				memset(buffer, 0, sizeof(buffer));
+
+				while(1){
+
+					FD_ZERO(&readfds);
+					FD_SET(socket_msgServ, &readfds);
+
+					timeout.tv_sec = 10;
+					timeout.tv_usec = 0;
+
+					counter=select(socket_msgServ+1, &readfds, (fd_set*)NULL, (fd_set*)NULL, &timeout);
+
+					if(counter==-1){
+						printf("select error: %s", strerror(errno));
+						exit(1);
 					}
 
-					snprintf( message, sizeof(message), "%s %s", "PUBLISH", line);
-
-		      n = sendto( socket_msgServ, message, strlen(message), 0, (struct sockaddr*)&user_msgserver, sizeof(user_msgserver) );
-		      if( n == -1){
-		         printf( "sendto: %s\n", strerror( errno ) );
-
-		         if( errno == EPIPE){
-							/*if the message server stops responding a new msgerver must be found*/
-							knowsOnlineMsgservs = FALSE;
-							hasMsgserv = FALSE;
-						 }
-		      }
-
-					printf(">> ");
-				}
-				else if( !strcmp( tok, "show_latest_messages" ) ){
-
-					sscanf( line, "%s %d", tok , &n_msgs );
-					snprintf( message, sizeof(message), "%s %d", "GET_MESSAGES", n_msgs);
-
-		      n = sendto( socket_msgServ, message, strlen(message), 0, (struct sockaddr*)&user_msgserver, sizeof(user_msgserver) );
-
-		      if( n == -1){
-		         printf( "sendto: %s\n", strerror( errno ) );
-		         if( errno == EPIPE){
-							knowsOnlineMsgservs = FALSE;
-							hasMsgserv = FALSE;
-						}
-		      }
-
-					addrlen=sizeof(user_msgserver);
-					memset(buffer, 0, sizeof(buffer));
-
-					while(1){
-
-						FD_ZERO(&readfds);
-						FD_SET(socket_msgServ, &readfds);
-
-						timeout.tv_sec = 10;
-						timeout.tv_usec = 0;
-
-						counter=select(socket_msgServ+1, &readfds, (fd_set*)NULL, (fd_set*)NULL, &timeout);
-
-						if(counter==-1){
-							printf("select error: %s", strerror(errno));
-							exit(1);
-						}
-
-						if(timeout.tv_sec == 0){
-								printf("Timeout: No message was received\n");
-								printf(">> ");
-								break;
-						}
-
-						if(FD_ISSET(socket_msgServ, &readfds)){
-							n = recvfrom( socket_msgServ, buffer, 1000, 0, (struct sockaddr*)&user_msgserver, &addrlen );
-							if( n == -1){
-								printf( "recvfrom: %s\n", strerror( errno ) );
-
-								if( errno == EPIPE){
-							 /*if the message server stops responding a new msgerver must be found*/
-							 	 knowsOnlineMsgservs = FALSE;
-								 hasMsgserv = FALSE;
-
-								}
-							}
-
-							extract_message(buffer, 1);
-							printf("%s", buffer);
+					if(timeout.tv_sec == 0){
+							printf("Timeout: No message was received\n");
 							printf(">> ");
 							break;
 					}
+
+					if(FD_ISSET(socket_msgServ, &readfds)){
+						n = recvfrom( socket_msgServ, buffer, 1000, 0, (struct sockaddr*)&user_msgserver, &addrlen );
+						if( n == -1){
+							printf( "recvfrom: %s\n", strerror( errno ) );
+
+							if( errno == EPIPE){
+						 /*if the message server stops responding a new msgerver must be found*/
+						 	 knowsOnlineMsgservs = FALSE;
+							 hasMsgserv = FALSE;
+
+							}
+						}
+
+						extract_message(buffer, 1);
+						printf("%s", buffer);
+						printf(">> ");
+						break;
 				}
 			}
-
-			memset(tok, 0, sizeof(tok));
-			memset(line, 0, sizeof(line));
-			memset(message, 0, sizeof(message));
-			memset(buffer, 0, sizeof(buffer));
-
 		}
+
+		memset(tok, 0, sizeof(tok));
+		memset(line, 0, sizeof(line));
+		memset(message, 0, sizeof(message));
+		memset(buffer, 0, sizeof(buffer));
+
 	}
+
 
 	return(0);
 
 }
 
 int invalid_command(char* line, char* tok){
+
 
 	char* delims=" ";
 
@@ -287,23 +289,45 @@ int invalid_command(char* line, char* tok){
 
 }
 
-void extract_message(char* line, int flag)
-{
-	char* tok;
+int extract_command(char *line, char* command){
+
+	if( !strcmp("exit\n", line) ){
+		strcpy( command, "exit\n" );
+		return(0);
+	}
+	else if( !strcmp("show_servers\n", line) ){
+		strcpy( command, "show_servers\n" );
+		return(0);
+	}
+
+	sscanf( line, "%s ", command);
+
+	if(strcmp(command, "show_latest_messages")) return(0);
+
+	if(strcmp(command, "publish")) return(0);
+
+	return(1);
+
+}
+
+void extract_message(char* line, int flag){
+	char tok[LINE_MAX];
 	char*delims=" ";
 
-	if(flag)
-	{
+	if(flag){
 		delims="\n";
 	}
 
-	tok=strtok(line, delims);
+	strcpy( tok, strtok(line, delims) );
 
-	if( (tok = strtok( NULL, "\0" ) ) == NULL ){
+	if( (strcpy( tok, strtok( NULL, "\0" ) ) ) == NULL ){
 		printf("Strtok error\n");
 		exit(1);
 	}
+
 	strcpy(line, tok);
+
+
 }
 
 int get_OnlineMsgServers(char* buffer, MESSAGE_SERVER ** ms_array){

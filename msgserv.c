@@ -216,8 +216,6 @@ int main(int argc, char** argv){
 
     if(FD_ISSET( STDIN_FILENO, &readfds )){
 
-      printf(">> ");
-      fflush(stdout);
       fgets( line, LINE_MAX, stdin );
       /*os comandos do teclado exit, GET_SERVERS e GET_MESSAGES so podem acontecer depois
         de uma leitura do teclado*/
@@ -255,8 +253,6 @@ int main(int argc, char** argv){
         free(socket_ms_c);
         free(ms);
 
-
-
         return(0);
       }
 
@@ -279,6 +275,9 @@ int main(int argc, char** argv){
         printf(">> ");
         fflush(stdout);
       }
+      
+      printf(">> ");
+      fflush(stdout);
     }
 
     /*a leitura nao tem de estar dentro do if fgets porque so depende de receber a mensagem*/
