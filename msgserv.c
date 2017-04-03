@@ -92,7 +92,6 @@ int main(int argc, char** argv){
   for(i=0 ; i<m ; i++){
 
     history[i] = ( char* )malloc( LINE_MAX * sizeof( char ) );
-    history[i] = "initial_string";
   }
 
   printf(">> ");
@@ -140,14 +139,20 @@ int main(int argc, char** argv){
              socket_tcp_c[k] = new_tcp_session_c( &(others_ms[k].ip_addr), others_ms[k].tcp_port, &ms[k]);
            }
 
-           /* 5) gets the history of messages from a random server online, by sending a SGET_MESSAGES message*/
-           /*k=rand()%n_servidores_ativos;
-           send_tcp_message("SGET_MESSAGES",socket_tcp_c[k]);*/
+           /*5) gets the history of messages from a random server online, by sending a SGET_MESSAGES message*/
+           //k=rand()%n_servidores_ativos;
+           /*for(k=0; k<n_servidores_ativos;k++)
+			{
+				if(!strcmp(others_ms[k].name, "MANEL")) break;
+			}
 
-           /*memset(buffer, 0, sizeof(buffer));
-           read_tcp_message(buffer, socket_tcp_c[k]);*/
+           send_tcp_message("SGET_MESSAGES",socket_tcp_c[k]);
 
-           /*printf("mensagens:\n %s\n", buffer);*/
+           memset(buffer, 0, sizeof(buffer));
+           read_tcp_message(buffer, socket_tcp_c[k]);
+
+           extract_message(buffer, 1);
+           printf("histórico de mensagens:\n %s", buffer);*/
            printf(">> ");
            fflush(stdout);
 

@@ -125,7 +125,7 @@ int main(int argc, char ** argv)
 
 					for(k=0; k<n_servidores_ativos;k++)
 					{
-						if(!strcmp(OnlineMsgServers[k].name, "FILIPA")) break;
+						if(!strcmp(OnlineMsgServers[k].name, "MANEL")) break;
 					}
 
 					socket_msgServ = new_socket( &(OnlineMsgServers[k].ip_addr) , OnlineMsgServers[k].udp_port , &user_msgserver );
