@@ -23,8 +23,8 @@ int main(int argc, char** argv){
   char line[50], msg[100], join_msg[100], buffer[1000], protocol_msg[20], content[100];
   int upt = 0, tpt = 0;
   int i, n=0, k=0;
-  int m, r, sipt, addrlen, lc=0, n_msgs=0;
-  int socket_idServ, socket_rmb, *socket_tcp_c, maxfd, counter;
+  int m, r, sipt, addrlen, lc=0, n_msgs=0, sock_num=0;
+  int socket_idServ, socket_rmb, *socket_msgServ, maxfd, newfd, counter;
   int n_servidores_ativos=0;
   fd_set readfds, writefds;
   struct timeval timeout;
@@ -90,7 +90,6 @@ int main(int argc, char** argv){
 
   history = (char**)malloc( m * sizeof( char* ) );
   for(i=0 ; i<m ; i++){
-
     history[i] = ( char* )malloc( LINE_MAX * sizeof( char ) );
   }
 
@@ -133,26 +132,23 @@ int main(int argc, char** argv){
            n_servidores_ativos = new_ms_array( buffer, my_server.name, &others_ms );
 
            ms = ( struct sockaddr_in * )malloc( n_servidores_ativos * sizeof( struct sockaddr_in ) );
-           socket_tcp_c = ( int* )malloc( n_servidores_ativos * sizeof( int ) );
+           socket_msgServ = ( int* )malloc( n_servidores_ativos * sizeof( int ) );
 
            for(k=0; k<n_servidores_ativos; k++){
-             socket_tcp_c[k] = new_tcp_session_c( &(others_ms[k].ip_addr), others_ms[k].tcp_port, &ms[k]);
+             socket_msgServ[k] = new_tcp_session_c( &(others_ms[k].ip_addr), others_ms[k].tcp_port, &ms[k]);
            }
 
-           /*5) gets the history of messages from a random server online, by sending a SGET_MESSAGES message*/
-           //k=rand()%n_servidores_ativos;
-           /*for(k=0; k<n_servidores_ativos;k++)
-			{
-				if(!strcmp(others_ms[k].name, "MANEL")) break;
-			}
 
-           send_tcp_message("SGET_MESSAGES",socket_tcp_c[k]);
+           /* 5) gets the history of messages from a random server online, by sending a SGET_MESSAGES message*/
+           /*k=rand()%n_servidores_ativos;*/
+          /* for(sock_num=0; sock_num<n_servidores_ativos;sock_num++){
+ 						if(!strcmp(others_ms[sock_num].name, "FILIPA")) break;
+          } */
+          /* send_tcp_message("SGET_MESSAGES",socket_msgServ[sock_num]);
 
            memset(buffer, 0, sizeof(buffer));
-           read_tcp_message(buffer, socket_tcp_c[k]);
+           read_tcp_message(buffer, socket_msgServ[sock_num]);*/
 
-           extract_message(buffer, 1);
-           printf("histórico de mensagens:\n %s", buffer);*/
            printf(">> ");
            fflush(stdout);
 
@@ -173,13 +169,14 @@ int main(int argc, char** argv){
     /*reset_buffer(&buffer);*/
     memset(buffer, 0, sizeof(buffer));
 
-
     FD_ZERO(&readfds);
     FD_SET(socket_idServ, &readfds);
     FD_SET(socket_rmb, &readfds);
     FD_SET(STDIN_FILENO, &readfds);
+    FD_SET(socket_msgServ[sock_num], &readfds);
 
-    maxfd=max(socket_idServ, socket_rmb); /*STDIN_FILENO = 0*/
+    maxfd = max(socket_idServ, socket_rmb); /*STDIN_FILENO = 0*/
+  /*  maxfd = max(maxfd, socket_msgServ[sock_num]);*/
 
     timeout.tv_sec = r;
     timeout.tv_usec = 0;
@@ -199,6 +196,11 @@ int main(int argc, char** argv){
         exit(1);
       }
     }
+
+  /*  for(sock_num=0; sock_num<n_servidores_ativos;sock_num++){
+     if(!strcmp(others_ms[sock_num].name, "FILIPA")) break;
+    }
+    if (sock_num == (n_servidores_ativos)) sock_num=-1; */
 
     if(FD_ISSET( STDIN_FILENO, &readfds )){
 
@@ -220,7 +222,7 @@ int main(int argc, char** argv){
           exit( 1 );
         }
         for(k=0; k<n_servidores_ativos; k++){
-          if( close( socket_tcp_c[k] ) != 0 ){
+          if( close( socket_msgServ[k] ) != 0 ){
             printf( "close socket message server: %s\n", strerror( errno ) );
             exit(1);
           }
@@ -236,10 +238,6 @@ int main(int argc, char** argv){
         for(i=0 ; i<20 ; i++){
             free(others_ms[i].name);
         }
-
-
-
-
 
         return(0);
       }
@@ -281,7 +279,6 @@ int main(int argc, char** argv){
 
     if( FD_ISSET( socket_rmb, &readfds) ){
       addrlen = sizeof(rmb);
-      //memset(buffer, 0, sizeof(buffer));
       n = recvfrom( socket_rmb, buffer, 1000, 0, (struct sockaddr*)&rmb, &addrlen );
       if( n == -1){
         printf( "recvfrom: %s\n", strerror( errno ) );
@@ -308,17 +305,35 @@ int main(int argc, char** argv){
           for( i=0 ; i<n_msgs ; i++){
             strcat( msg, history[i]);
           }
-        /*  if(FD_ISSET(socket_rmb, &writefds)){ */
+
             n = sendto( socket_rmb, msg, strlen(msg)+1, 0, (struct sockaddr*)&rmb, sizeof(rmb) );
             if( n == -1 ){
               printf("nao consegui enviar a mensagem para o rmb");
               exit(1);
             }
-          /*}*/
       }
     }
+/*    if(sock_num!=-1){
+      if( FD_ISSET( socket_msgServ[sock_num], &readfds)){
+        addrlen = sizeof( ms[sock_num] );
+        if( ( newfd = accept( socket_msgServ[sock_num], (struct sockaddr*)&ms[sock_num], &addrlen ) ) == -1 ) exit(1);
 
+        memset(buffer, 0, sizeof(buffer));
+        read_tcp_message( buffer, newfd );
 
+        if( !strcmp("SGET_MESSAGES", buffer) ){
+
+          memset(msg, 0, sizeof(msg));
+          strcpy(msg, "SMESSAGES\n");
+
+          for( i=0 ; i<lc ; i++){
+            strcat( msg, history[i]);
+          }
+
+          send_tcp_message( msg, newfd );
+        }
+      }
+    }*/
   }
 
   if( close(socket_idServ) == -1){

@@ -115,7 +115,7 @@ int main(int argc, char ** argv)
 					/*3) create an online msgservers array*/
 					n_servidores_ativos = get_OnlineMsgServers( buffer, &OnlineMsgServers );
 
-					/*de entre o numero de msgservers online escolhe um aleatorio para ser ligar*/
+					/*de entre o numero de msgservers online escolhe um aleatorio para se ligar*/
 					if(n_servidores_ativos==0){
 						printf("No server available, try again later\n");
 						printf(">> ");
